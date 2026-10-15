@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showNotification: (title: string, body: string) => ipcRenderer.invoke('show-notification', { title, body }),
   sendMediaCommand: (command: string) => ipcRenderer.invoke('media-command', command),
   searchYouTube: (query: string) => ipcRenderer.invoke('search-youtube', query),
+  fetchTts: (text: string) => ipcRenderer.invoke('fetch-tts', text),
   onWakeWordTriggered: (callback: () => void) => {
     ipcRenderer.on('wake-word-detected', () => callback());
   },

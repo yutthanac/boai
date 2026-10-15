@@ -36,6 +36,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   claude_model: import.meta.env.VITE_CLAUDE_MODEL || 'claude-3-5-sonnet-20241022',
   openai_model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o',
   gemini_model: import.meta.env.VITE_GEMINI_MODEL || 'gemini-flash-lite-latest',
+  grok_api_key: import.meta.env.VITE_GROK_API_KEY || '',
+  grok_model: import.meta.env.VITE_GROK_MODEL || 'grok-2-latest',
+  meta_api_key: import.meta.env.VITE_META_API_KEY || import.meta.env.VITE_GROQ_API_KEY || '',
+  meta_model: import.meta.env.VITE_META_MODEL || 'openai/gpt-oss-120b',
+  meta_provider: 'groq',
   input_device_id: 'default',
   output_device_id: 'default',
   auto_start: true,
@@ -48,6 +53,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   openai_tts_model: 'tts-1-hd',
   vad_timeout_ms: 3000,
   mini_mode_hotkey: 'Alt+Space',
+  theme: 'dark',
 };
 
 const DEFAULT_PERSONALITY: PersonalityConfig = {
@@ -66,7 +72,7 @@ const DEFAULT_PERSONALITY: PersonalityConfig = {
 const DEFAULT_MEMORIES: MemoryItem[] = [
   {
     id: 'mem_1',
-    content: 'ผู้ใช้ชอบทำงานในสภาพแวดล้อม Dark Theme และเน้นการพิมพ์/สั่งการเสียงภาษาไทยเป็นหลัก',
+    content: 'ชอบการพูดคุยที่เป็นกันเอง สนุกสนาน จริงใจ สบายๆ เหมือนเพื่อนแท้ที่เข้าใจกัน',
     category: 'preference',
     importance: 5,
     confidence: 98,
@@ -74,28 +80,6 @@ const DEFAULT_MEMORIES: MemoryItem[] = [
     status: 'active',
     created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    id: 'mem_2',
-    content: 'ชอบดื่มกาแฟดริปตอนเช้าเวลา 08:30 น. ก่อนเริ่มทำงานเขียนโค้ด',
-    category: 'routine',
-    importance: 4,
-    confidence: 90,
-    verified: true,
-    status: 'active',
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    updated_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 'mem_3',
-    content: 'กำลังพัฒนาโปรเจกต์ Personal AI Desktop Assistant ด้วย Electron, React และ TypeScript',
-    category: 'work',
-    importance: 5,
-    confidence: 100,
-    verified: true,
-    status: 'active',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
   }
 ];
 
@@ -276,7 +260,15 @@ export class DatabaseService {
         if (!parsed.gemini_model || parsed.gemini_model === 'gemini-3.6-flash') {
           parsed.gemini_model = 'gemini-flash-lite-latest';
         }
-        parsed.llm_provider = 'gemini';
+        if (!parsed.llm_provider) {
+          parsed.llm_provider = 'gemini';
+        }
+        if (!parsed.meta_model || parsed.meta_model === 'llama-3.3-70b-versatile') {
+          parsed.meta_model = 'openai/gpt-oss-120b';
+        }
+        if (!parsed.meta_api_key && DEFAULT_SETTINGS.meta_api_key) {
+          parsed.meta_api_key = DEFAULT_SETTINGS.meta_api_key;
+        }
         parsed.wake_word = 'โบ้';
         parsed.tts_engine = 'natural_female';
         if (!parsed.tts_rate || parsed.tts_rate <= 1.05) {
@@ -295,6 +287,14 @@ export class DatabaseService {
     }
     if (!localStorage.getItem(STORAGE_KEYS.MEMORIES)) {
       this.saveMemories(DEFAULT_MEMORIES);
+    } else {
+      const existingMems = this.getMemories(true);
+      const cleaned = existingMems.filter(
+        m => !m.content.includes('กาแฟ') && !m.content.includes('เขียนโค้ด') && !m.content.includes('ดริป')
+      );
+      if (cleaned.length !== existingMems.length) {
+        this.saveMemories(cleaned.length > 0 ? cleaned : DEFAULT_MEMORIES);
+      }
     }
     if (!localStorage.getItem(STORAGE_KEYS.KNOWLEDGE)) {
       this.saveKnowledge(DEFAULT_KNOWLEDGE);

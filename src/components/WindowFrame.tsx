@@ -1,8 +1,8 @@
-import { Minus, Square, X, Volume2, Mic, MicOff, Minimize2 } from 'lucide-react';
+import { Minus, Square, X, Volume2, Mic, MicOff, Minimize2, Sun, Moon } from 'lucide-react';
 import { useAssistantStore } from '../stores/useAssistantStore';
 
 export const WindowFrame: React.FC = () => {
-  const { state, statusText, isMuted, toggleMute, isAlwaysListening, toggleMiniMode } = useAssistantStore();
+  const { state, statusText, isMuted, toggleMute, isAlwaysListening, toggleMiniMode, theme, toggleTheme } = useAssistantStore();
 
   const getStateBadge = () => {
     switch (state) {
@@ -39,8 +39,8 @@ export const WindowFrame: React.FC = () => {
     <header className="h-10 w-full bg-[#0b0f19] border-b border-white/[0.08] flex items-center justify-between px-3 select-none window-drag-region z-50">
       {/* Left: App Title and Icon */}
       <div className="flex items-center gap-2.5 window-no-drag">
-        <div className="w-6 h-6 rounded-md bg-slate-800/80 p-0.5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
-          <img src="/assets/images/dog.png" alt="Bo AI Dog" className="w-full h-full object-contain" />
+        <div className="w-6 h-6 rounded-md bg-white p-0.5 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+          <img src="/bobo.png" alt="Bo AI" className="w-full h-full object-contain rounded-sm" />
         </div>
         <span className="font-semibold text-xs tracking-wide text-slate-200">
           BO AI <span className="text-[11px] font-normal text-slate-400">(น้องโบ)</span>
@@ -74,6 +74,14 @@ export const WindowFrame: React.FC = () => {
         </button>
 
         <div className="h-3.5 w-px bg-white/10 mx-1" />
+
+        <button
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง (Light Theme)' : 'เปลี่ยนเป็นธีมมืด (Dark Theme)'}
+          className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
+        >
+          {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+        </button>
 
         <button
           onClick={toggleMiniMode}

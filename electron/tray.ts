@@ -4,8 +4,13 @@ import path from 'path';
 let tray: Tray | null = null;
 
 export function setupTray(mainWindow: BrowserWindow): Tray {
-  // Create simple solid icon image if file doesn't exist
-  const icon = nativeImage.createEmpty();
+  const iconPath = path.join(__dirname, '../public/bobo.png');
+  let icon = nativeImage.createFromPath(iconPath);
+  if (icon.isEmpty()) {
+    icon = nativeImage.createEmpty();
+  } else {
+    icon = icon.resize({ width: 18, height: 18 });
+  }
 
   tray = new Tray(icon);
   tray.setToolTip('Bo AI (น้องโบ) — Personal AI Desktop Assistant');

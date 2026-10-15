@@ -44,3 +44,245 @@
 .window-no-drag {
   -webkit-app-region: no-drag;
 }
+
+/* ======================================================== */
+/* LIGHT THEME (ธีมสว่าง) */
+/* ======================================================== */
+html.light,
+.theme-light {
+  color-scheme: light;
+}
+
+.theme-light {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.theme-light .glass-panel {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+}
+
+.theme-light .glass-panel-elevated {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.07);
+}
+
+.theme-light main {
+  background-color: #f8fafc !important;
+}
+
+.theme-light header {
+  background-color: #ffffff !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.theme-light aside {
+  background-color: #ffffff !important;
+  border-right-color: #e2e8f0 !important;
+}
+
+.theme-light .text-white {
+  color: #0f172a !important;
+}
+
+.theme-light .text-slate-100,
+.theme-light .text-slate-200 {
+  color: #1e293b !important;
+}
+
+.theme-light .text-slate-300 {
+  color: #334155 !important;
+}
+
+.theme-light .text-slate-400 {
+  color: #475569 !important;
+}
+
+.theme-light .text-slate-500 {
+  color: #64748b !important;
+}
+
+.theme-light .bg-\[\#07090E\],
+.theme-light .bg-\[\#090D16\],
+.theme-light .bg-\[\#0b0f19\],
+.theme-light .bg-\[\#0f1523\],
+.theme-light .bg-\[\#141c2e\],
+.theme-light .bg-\[\#151d30\],
+.theme-light .bg-slate-900,
+.theme-light .bg-slate-950 {
+  background-color: #ffffff !important;
+}
+
+.theme-light .bg-slate-800 {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+.theme-light .bg-slate-800\/80,
+.theme-light .bg-slate-800\/90 {
+  background-color: #f1f5f9 !important;
+}
+
+.theme-light .border-slate-700,
+.theme-light .border-slate-800,
+.theme-light .border-white\/10,
+.theme-light .border-white\/\[0\.06\],
+.theme-light .border-white\/\[0\.08\] {
+  border-color: #e2e8f0 !important;
+}
+
+.theme-light .bg-white\/5,
+.theme-light .bg-white\/10,
+.theme-light .bg-white\/\[0\.04\] {
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+.theme-light input,
+.theme-light textarea,
+.theme-light select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Natural Talking Mouth Animation for Bo */
+@keyframes boMouthTalk {
+  0% {
+    transform: scaleY(0.25) scaleX(0.9);
+    border-radius: 9999px;
+    height: 6px;
+  }
+  20% {
+    transform: scaleY(1.05) scaleX(1.05);
+    border-radius: 12px 12px 18px 18px;
+    height: 18px;
+  }
+  40% {
+    transform: scaleY(0.4) scaleX(0.95);
+    border-radius: 9999px;
+    height: 8px;
+  }
+  60% {
+    transform: scaleY(1.25) scaleX(1.1);
+    border-radius: 14px 14px 22px 22px;
+    height: 22px;
+  }
+  80% {
+    transform: scaleY(0.55) scaleX(0.95);
+    border-radius: 9999px;
+    height: 10px;
+  }
+  100% {
+    transform: scaleY(0.25) scaleX(0.9);
+    border-radius: 9999px;
+    height: 6px;
+  }
+}
+
+.animate-bo-mouth-talk {
+  animation: boMouthTalk 0.42s ease-in-out infinite;
+  transform-origin: center top;
+}
+
+@keyframes boHeadBob {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-2px) rotate(-0.8deg);
+  }
+  75% {
+    transform: translateY(1.5px) rotate(0.8deg);
+  }
+}
+
+.animate-bo-talk-bob {
+  animation: boHeadBob 0.55s ease-in-out infinite;
+}
+
+@keyframes boCheekBlush {
+  0%, 100% {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.12);
+  }
+}
+
+.animate-bo-blush {
+  animation: boCheekBlush 1.1s ease-in-out infinite;
+}
+
+@keyframes boTongueBounce {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  30% {
+    transform: translateY(-2px) scale(1.1);
+  }
+  65% {
+    transform: translateY(1.5px) scale(0.95);
+  }
+}
+
+.animate-bo-tongue {
+  animation: boTongueBounce 0.38s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+@keyframes boVoiceRing {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.25;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.animate-bo-voice-ring-1 {
+  animation: boVoiceRing 1.6s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.animate-bo-voice-ring-2 {
+  animation: boVoiceRing 1.6s cubic-bezier(0, 0.2, 0.8, 1) infinite 0.5s;
+}
+
+@keyframes boEarPerk {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-3deg) translateY(-1px);
+  }
+}
+
+.animate-bo-ear-left {
+  animation: boEarPerk 2.4s ease-in-out infinite;
+  transform-origin: bottom right;
+}
+
+@keyframes boEarPerkRight {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(3deg) translateY(-1px);
+  }
+}
+
+.animate-bo-ear-right {
+  animation: boEarPerkRight 2.4s ease-in-out infinite;
+  transform-origin: bottom left;
+}
+

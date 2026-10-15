@@ -1,6 +1,6 @@
 export type AssistantState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
-export type LLMProvider = 'claude' | 'openai' | 'gemini';
+export type LLMProvider = 'gemini' | 'grok' | 'meta' | 'openai' | 'claude';
 
 export interface AudioDevice {
   deviceId: string;
@@ -133,6 +133,11 @@ export interface AppSettings {
   claude_model: string;
   openai_model: string;
   gemini_model: string;
+  grok_api_key?: string;
+  grok_model?: string;
+  meta_api_key?: string;
+  meta_model?: string;
+  meta_provider?: 'groq' | 'openrouter';
   input_device_id: string;
   output_device_id: string;
   auto_start: boolean;
@@ -140,11 +145,25 @@ export interface AppSettings {
   tts_rate: number;
   tts_pitch: number;
   tts_voice: string;
-  tts_engine: 'natural_female' | 'openai' | 'browser';
+  tts_engine: 'natural_female' | 'openai' | 'grok' | 'browser';
   openai_tts_voice: 'nova' | 'shimmer' | 'alloy' | 'echo' | 'fable' | 'onyx';
   openai_tts_model: 'tts-1' | 'tts-1-hd';
+  grok_tts_voice?: 'leo' | 'rex' | 'ara' | 'eve' | 'sal';
   vad_timeout_ms: number;
   mini_mode_hotkey?: string;
+  theme?: 'dark' | 'light';
+}
+
+export interface ProviderQuotaInfo {
+  provider: LLMProvider;
+  remainingRequests?: number;
+  limitRequests?: number;
+  remainingTokens?: number;
+  limitTokens?: number;
+  resetTime?: string;
+  status: 'ok' | 'near_limit' | 'exhausted';
+  lastUpdated: string;
+  message?: string;
 }
 
 export interface ToolItem {

@@ -467,7 +467,7 @@ export class AudioService {
     return chunks.length > 0 ? chunks : [cleaned.slice(0, maxLen)];
   }
 
-  // Text-to-Speech (TTS) - Supports Natural Thai Female Voice, OpenAI & Browser Fallback
+  // Text-to-Speech (TTS) - Supports Natural Thai Female Voice, Grok, OpenAI & Browser Fallback
   public async speak(text: string, rate = 1.20, pitch = 1.0): Promise<void> {
     this.setSpeakingState(true);
     try {
@@ -484,27 +484,52 @@ export class AudioService {
         }
       }
 
-      // 2. OpenAI Natural Voice (If user configured and has credits)
-      if (settings.tts_engine === 'openai' && settings.openai_api_key) {
-        try {
-          await this.speakWithOpenAI(
-            this.normalizeThaiTtsText(text),
-            settings.openai_api_key,
-            settings.openai_tts_voice || 'nova',
-            settings.openai_tts_model || 'tts-1-hd',
-            effectiveRate
-          );
-          return;
-        } catch (err) {
-          console.warn('OpenAI TTS failed, falling back to Natural Female Voice:', err);
+      // 2. Grok Voice (xAI TTS API with leo, rex, ara, eve, sal)
+      if (settings.tts_engine === 'grok') {
+        if (settings.grok_api_key) {
           try {
-            await this.speakWithNaturalFemale(text, effectiveRate);
+            await this.speakWithGrok(
+              this.normalizeThaiTtsText(text),
+              settings.grok_api_key,
+              settings.grok_tts_voice || 'leo',
+              effectiveRate
+            );
             return;
-          } catch (_) {}
+          } catch (err) {
+            console.warn('Grok TTS failed, falling back to Natural Female Voice:', err);
+          }
         }
+        // Fallback to Natural Female Voice if no key or error
+        try {
+          await this.speakWithNaturalFemale(text, effectiveRate);
+          return;
+        } catch (_) {}
       }
 
-      // 3. Browser SpeechSynthesis fallback
+      // 3. OpenAI Natural Voice (If user configured and has credits)
+      if (settings.tts_engine === 'openai') {
+        if (settings.openai_api_key) {
+          try {
+            await this.speakWithOpenAI(
+              this.normalizeThaiTtsText(text),
+              settings.openai_api_key,
+              settings.openai_tts_voice || 'nova',
+              settings.openai_tts_model || 'tts-1-hd',
+              effectiveRate
+            );
+            return;
+          } catch (err) {
+            console.warn('OpenAI TTS failed (possibly quota exhausted), falling back to Natural Female Voice:', err);
+          }
+        }
+        // Fallback to Natural Female Voice if no key or error
+        try {
+          await this.speakWithNaturalFemale(text, effectiveRate);
+          return;
+        } catch (_) {}
+      }
+
+      // 4. Browser SpeechSynthesis fallback
       await this.speakWithBrowser(text, effectiveRate, pitch);
     } finally {
       this.setSpeakingState(false);
@@ -521,8 +546,22 @@ export class AudioService {
     // Sequential audio playback with crisp, natural speech rate
     for (const chunk of chunks) {
       if (!chunk.trim()) continue;
-      await new Promise<void>((resolve) => {
-        const audio = new Audio(`/api/tts?text=${encodeURIComponent(chunk.trim())}`);
+      await new Promise<void>(async (resolve, reject) => {
+        let audioSrc = `/api/tts?text=${encodeURIComponent(chunk.trim())}`;
+
+        // In Electron, fetch data URL via IPC to bypass CORS / file:// limitations
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.fetchTts) {
+          try {
+            const ipcRes = await (window as any).electronAPI.fetchTts(chunk.trim());
+            if (ipcRes && ipcRes.success && ipcRes.dataUrl) {
+              audioSrc = ipcRes.dataUrl;
+            }
+          } catch (e) {
+            console.warn('[AudioService] IPC fetchTts error:', e);
+          }
+        }
+
+        const audio = new Audio(audioSrc);
         const effectiveSpeed = Math.max(0.8, Math.min(2.0, speed || 1.20));
         audio.playbackRate = effectiveSpeed;
         this.currentAudioElement = audio;
@@ -531,13 +570,13 @@ export class AudioService {
           this.currentAudioElement = null;
           resolve();
         };
-        audio.onerror = () => {
+        audio.onerror = (e) => {
           this.currentAudioElement = null;
-          resolve();
+          reject(e);
         };
-        audio.play().catch(() => {
+        audio.play().catch((e) => {
           this.currentAudioElement = null;
-          resolve();
+          reject(e);
         });
       });
     }
@@ -597,6 +636,76 @@ export class AudioService {
     });
   }
 
+  // xAI Grok TTS API (leo, rex, ara, eve, sal)
+  public async speakWithGrok(
+    text: string,
+    apiKey: string,
+    voice: string = 'leo',
+    speed: number = 1.0
+  ): Promise<void> {
+    this.stopSpeaking();
+
+    const response = await fetch('https://api.x.ai/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'xai.grok-tts',
+        input: text,
+        voice: voice || 'leo',
+        speed: Math.max(0.5, Math.min(2.0, speed || 1.0)),
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Grok TTS HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const audioUrl = URL.createObjectURL(blob);
+    const audio = new Audio(audioUrl);
+    this.currentAudioElement = audio;
+
+    return new Promise((resolve) => {
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        this.currentAudioElement = null;
+        resolve();
+      };
+      audio.onerror = (e) => {
+        console.warn('Grok audio playback error:', e);
+        URL.revokeObjectURL(audioUrl);
+        this.currentAudioElement = null;
+        resolve();
+      };
+      audio.play().catch((e) => {
+        console.warn('Audio play error:', e);
+        resolve();
+      });
+    });
+  }
+
+  // Apply Grok-style witty & rapid cadence using free Studio Voice (No API Key Required)
+  public applyGrokFreePreset(): void {
+    const currentSettings = db.getSettings();
+    db.saveSettings({
+      ...currentSettings,
+      tts_engine: 'natural_female',
+      tts_rate: 1.25, // Witty, rapid cadence matching Grok
+      tts_pitch: 1.0,
+    });
+    const pers = db.getPersonality();
+    if (pers.tuning) {
+      pers.tuning.wittiness = 85;
+      pers.tuning.conciseness = 85;
+      pers.tuning.friendliness = 90;
+      db.savePersonality(pers);
+    }
+  }
+
   // Browser SpeechSynthesis with Natural Thai voice prioritization
   public speakWithBrowser(text: string, rate = 1.20, pitch = 1.0): Promise<void> {
     return new Promise((resolve) => {
@@ -616,13 +725,24 @@ export class AudioService {
       // Select highest quality Natural / Online Thai voice if available
       const voices = window.speechSynthesis.getVoices();
       const thaiVoices = voices.filter(v => v.lang.includes('th') || v.name.toLowerCase().includes('thai'));
+      const femaleVoice = thaiVoices.find(v =>
+        v.name.toLowerCase().includes('premwadee') ||
+        v.name.toLowerCase().includes('female') ||
+        v.name.toLowerCase().includes('woman')
+      );
       const naturalVoice =
+        femaleVoice ||
         thaiVoices.find(v => v.name.toLowerCase().includes('natural')) ||
         thaiVoices.find(v => v.name.toLowerCase().includes('online')) ||
         thaiVoices[0];
 
       if (naturalVoice) {
         utterance.voice = naturalVoice;
+        // If system only has male voice (e.g. Pattara / Niwat on Windows 10/11), adjust pitch to sound youthful & friendly
+        const isMaleVoice = naturalVoice.name.toLowerCase().includes('pattara') || naturalVoice.name.toLowerCase().includes('niwat') || naturalVoice.name.toLowerCase().includes('david');
+        if (isMaleVoice && !femaleVoice) {
+          utterance.pitch = Math.min(2.0, (pitch || 1.0) * 1.30);
+        }
       }
 
       utterance.onend = () => {

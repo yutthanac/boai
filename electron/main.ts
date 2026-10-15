@@ -19,6 +19,7 @@ function createWindow() {
     backgroundColor: '#00000000',
     show: false,
     hasShadow: true,
+    icon: path.join(__dirname, '../public/bobo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,

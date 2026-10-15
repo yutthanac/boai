@@ -1,4 +1,4 @@
-import { ChatMessage, PersonalityConfig, LLMProvider } from '../../types';
+import { ChatMessage, PersonalityConfig, LLMProvider, ProviderQuotaInfo } from '../../types';
 import { db } from '../db/databaseService';
 import { weatherService } from '../weather/weatherService';
 import { musicService } from '../music/musicService';
@@ -45,7 +45,11 @@ export class AIService {
     }
 
     prompt += `2. ห้ามพูดถึงคำว่า AI, LLM, Gemini, OpenAI, Claude, API หรือคำศัพท์เทคนิคระบบ และไม่ต้องแนะนำตัวเป็นระบบ
-3. กฎการควบคุมเครื่องเล่นเพลงและระดับเสียง:
+3. กฎสำคัญมากเรื่องบทสนทนา (ห้ามจำเจ):
+- ห้ามทักหรือพูดถึงเรื่อง "ดริปกาแฟ", "จิบกาแฟ", "นั่งเขียนโค้ด" หรือเรื่องเดิมๆ ซ้ำซากโดยที่ผู้ใช้ไม่ได้พูดถึงเด็ดขาด!
+- ให้อ่านและจับบริบทของคนทั่วไปในชีวิตประจำวัน (เช่น ถามว่าวันนี้เป็นไงบ้าง, กินข้าวหรือยัง, เหนื่อยไหม, อากาศดีไหม, หรือชวนคุยเรื่องทั่วไปอย่างสดใส)
+- ตีความสิ่งที่ผู้ใช้พูดมาแล้วต่อบทสนทนาอย่างเป็นธรรมชาติ ไหลลื่น สนุกสนาน เป็นกันเอง และให้ความรู้สึกเหมือนเพื่อนมนุษย์แท้ๆ นั่งคุยข้างๆ
+4. กฎการควบคุมเครื่องเล่นเพลงและระดับเสียง:
 - เมื่อสั่ง "ปิด", "ปิดเพลง", "ปิดไปเลย" -> ปิดเพลงทันที นำแถบเพลงออก สแตนด์บายรอรับคำสั่งใหม่
 - เมื่อสั่ง "พอส", "pause", "หยุด" -> พักเพลงชั่วคราว
 - เมื่อสั่ง "เปิด", "บอกเปิด", "เล่นต่อ", "เปิดต่อ", "resume" -> เล่นเพลงเดิมต่อ หรือเริ่มเปิดเพลงจากคิวลิสต์ทันที
@@ -57,14 +61,16 @@ export class AIService {
 - เมื่อสั่ง "ปิดเสียง" -> ปิดเสียง (Mute)
 \n`;
 
-    if (memories.length > 0) {
-      prompt += `--- เรื่องที่จำได้เกี่ยวกับเพื่อนคนนี้ (Long-term Memories) ---\n`;
-      memories
-        .sort((a, b) => b.importance - a.importance)
-        .slice(0, 8)
-        .forEach(m => {
-          prompt += `- ${m.content}\n`;
-        });
+    const activeMems = memories
+      .filter(m => !m.content.includes('กาแฟ') && !m.content.includes('เขียนโค้ด') && !m.content.includes('ดริป'))
+      .sort((a, b) => b.importance - a.importance)
+      .slice(0, 5);
+
+    if (activeMems.length > 0) {
+      prompt += `--- เรื่องที่จำได้เกี่ยวกับเพื่อนคนนี้ (ใช้เฉพาะเมื่อเกี่ยวข้องกับเรื่องที่กำลังคุยเท่านั้น อย่าหยิบมาพูดเองลอยๆ) ---\n`;
+      activeMems.forEach(m => {
+        prompt += `- ${m.content}\n`;
+      });
       prompt += `\n`;
     }
 
@@ -148,12 +154,50 @@ export class AIService {
 
     // 2. Call configured LLM Provider
     try {
-      if (settings.llm_provider === 'gemini' && settings.gemini_api_key) {
+      if (settings.llm_provider === 'grok' && settings.grok_api_key) {
+        try {
+          return await this.callGrok(messages, systemPrompt, settings.grok_api_key, settings.grok_model || 'grok-2-latest');
+        } catch (grokErr: any) {
+          if (grokErr?.message === 'GROK_QUOTA_EXHAUSTED' || grokErr?.message?.includes('429')) {
+            console.warn('[AIService] Grok quota exhausted, falling back to backup provider');
+            if (settings.gemini_api_key) {
+              const fallbackText = await this.callGemini(messages, systemPrompt, settings.gemini_api_key, settings.gemini_model);
+              return `⚠️ ข้อจำกัดโควต้าของ Grok หมดชั่วคราวแล้วนะแก โบ้เลยขอสลับมาตอบด้วย Gemini ให้ก่อนเพื่อไม่ให้บทสนทนาสะดุดจ้า:\n\n${fallbackText}`;
+            } else if (settings.openai_api_key) {
+              const fallbackText = await this.callOpenAI(messages, systemPrompt, settings.openai_api_key, settings.openai_model || 'gpt-4o');
+              return `⚠️ ข้อจำกัดโควต้าของ Grok หมดชั่วคราวแล้วนะแก โบ้เลยขอสลับมาตอบด้วย OpenAI ให้ก่อนจ้า:\n\n${fallbackText}`;
+            } else {
+              return `โควต้าข้อจำกัดของ Grok หมดชั่วคราวแล้วนะแก (Rate limit reached) รอรีเซ็ตสักครู่นะ หรือใส่ Gemini API Key เสริมไว้ในหน้าตั้งค่าเพื่อให้โบ้สลับใช้ได้เลย!`;
+            }
+          }
+          throw grokErr;
+        }
+      } else if (settings.llm_provider === 'meta' && settings.meta_api_key) {
+        try {
+          return await this.callMeta(messages, systemPrompt, settings.meta_api_key, settings.meta_model || 'openai/gpt-oss-120b', settings.meta_provider || 'groq');
+        } catch (metaErr: any) {
+          if (metaErr?.message?.includes('GROQ_QUOTA_EXHAUSTED') || metaErr?.message?.includes('429')) {
+            console.warn('[AIService] Groq quota exhausted, falling back to backup provider');
+            if (settings.gemini_api_key) {
+              const fallbackText = await this.callGemini(messages, systemPrompt, settings.gemini_api_key, settings.gemini_model);
+              return `⚠️ ข้อจำกัดโควต้าของ Groq หมดชั่วคราวแล้วนะแก โบ้เลยขอสลับมาตอบด้วย Gemini ให้ก่อนเพื่อไม่ให้บทสนทนาสะดุดจ้า:\n\n${fallbackText}`;
+            } else if (settings.openai_api_key) {
+              const fallbackText = await this.callOpenAI(messages, systemPrompt, settings.openai_api_key, settings.openai_model || 'gpt-4o');
+              return `⚠️ ข้อจำกัดโควต้าของ Groq หมดชั่วคราวแล้วนะแก โบ้เลยขอสลับมาตอบด้วย OpenAI ให้ก่อนจ้า:\n\n${fallbackText}`;
+            }
+          }
+          throw metaErr;
+        }
+      } else if (settings.llm_provider === 'gemini' && settings.gemini_api_key) {
         return await this.callGemini(messages, systemPrompt, settings.gemini_api_key, settings.gemini_model);
       } else if (settings.llm_provider === 'openai' && settings.openai_api_key) {
         return await this.callOpenAI(messages, systemPrompt, settings.openai_api_key, settings.openai_model || 'gpt-4o');
       } else if (settings.llm_provider === 'claude' && settings.claude_api_key) {
         return await this.callClaude(messages, systemPrompt, settings.claude_api_key, settings.claude_model);
+      } else if (settings.grok_api_key) {
+        return await this.callGrok(messages, systemPrompt, settings.grok_api_key, settings.grok_model || 'grok-2-latest');
+      } else if (settings.meta_api_key) {
+        return await this.callMeta(messages, systemPrompt, settings.meta_api_key, settings.meta_model || 'openai/gpt-oss-120b', settings.meta_provider || 'groq');
       } else if (settings.gemini_api_key) {
         return await this.callGemini(messages, systemPrompt, settings.gemini_api_key, settings.gemini_model);
       } else if (settings.openai_api_key) {
@@ -161,7 +205,7 @@ export class AIService {
       }
     } catch (err: any) {
       console.warn('API call error, falling back:', err);
-      return `ขอโทษทีนะแก สัญญาณสะดุดไปนิดนึง ลองถามใหม่อีกทีนะ`;
+      return `ขอโทษทีนะแก สัญญาณโมเดล ${settings.llm_provider} สะดุดไปนิดนึง (${err?.message || 'Error'}) ลองถามใหม่อีกทีนะ`;
     }
 
     // 3. Fallback / Offline responses
@@ -292,6 +336,193 @@ export class AIService {
     throw lastError || new Error('Gemini API call failed');
   }
 
+  // xAI Grok (Grok-2, Grok-beta) with live Quota & Rate Limit Inspection
+  public async callGrok(messages: ChatMessage[], systemPrompt: string, apiKey: string, model: string): Promise<string> {
+    const formattedMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages.slice(-10).map(m => ({ role: m.role, content: m.content })),
+    ];
+
+    const selectedModel = model || 'grok-2-latest';
+    const res = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: selectedModel,
+        messages: formattedMessages,
+        temperature: 0.7,
+      }),
+    });
+
+    // Inspect xAI Rate Limit Headers
+    const remReqHeader = res.headers.get('x-ratelimit-remaining-requests');
+    const limitReqHeader = res.headers.get('x-ratelimit-limit-requests');
+    const resetReqHeader = res.headers.get('x-ratelimit-reset-requests');
+    const remTokensHeader = res.headers.get('x-ratelimit-remaining-tokens');
+    const limitTokensHeader = res.headers.get('x-ratelimit-limit-tokens');
+
+    const remainingRequests = remReqHeader ? parseInt(remReqHeader, 10) : undefined;
+    const limitRequests = limitReqHeader ? parseInt(limitReqHeader, 10) : undefined;
+    const remainingTokens = remTokensHeader ? parseInt(remTokensHeader, 10) : undefined;
+    const limitTokens = limitTokensHeader ? parseInt(limitTokensHeader, 10) : undefined;
+
+    let status: 'ok' | 'near_limit' | 'exhausted' = 'ok';
+    if (res.status === 429) {
+      status = 'exhausted';
+    } else if (remainingRequests !== undefined) {
+      if (remainingRequests <= 0) {
+        status = 'exhausted';
+      } else if (remainingRequests <= 5) {
+        status = 'near_limit';
+      }
+    }
+
+    const quotaInfo: import('../../types').ProviderQuotaInfo = {
+      provider: 'grok',
+      remainingRequests,
+      limitRequests,
+      remainingTokens,
+      limitTokens,
+      resetTime: resetReqHeader || undefined,
+      status,
+      lastUpdated: new Date().toLocaleTimeString('th-TH'),
+      message: status === 'exhausted'
+        ? 'โควต้าคำขอของ Grok หมดแล้วชั่วคราว (Rate limit reached)'
+        : status === 'near_limit'
+        ? `โควต้า Grok ใกล้หมดแล้ว (เหลือ ${remainingRequests} คำขอ)`
+        : `โควต้าพร้อมใช้งาน (เหลือ ${remainingRequests ?? 'ปกติ'} คำขอ)`
+    };
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('boai-quota-update', { detail: quotaInfo }));
+    }
+
+    if (res.status === 429) {
+      throw new Error('GROK_QUOTA_EXHAUSTED');
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.error?.message || `HTTP ${res.status}`;
+      if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate limit')) {
+        throw new Error('GROK_QUOTA_EXHAUSTED');
+      }
+      throw new Error(msg);
+    }
+
+    const data = await res.json();
+    let text = data.choices?.[0]?.message?.content || 'ไม่ได้รับคำตอบจาก Grok';
+
+    // If quota is near limit, append friendly warning
+    if (status === 'near_limit' && remainingRequests !== undefined) {
+      text += `\n\n*(💡 ปล. โควต้า Grok ใกล้หมดแล้วนะแก เหลืออีกประมาณ ${remainingRequests} คำขอก่อนรีเซ็ต)*`;
+    }
+
+    return text;
+  }
+
+  // Meta / Groq (Ultra-Fast) or OpenRouter
+  public async callMeta(messages: ChatMessage[], systemPrompt: string, apiKey: string, model: string, provider: 'groq' | 'openrouter' = 'groq'): Promise<string> {
+    const formattedMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages.slice(-10).map(m => ({ role: m.role, content: m.content })),
+    ];
+
+    const endpoint = provider === 'openrouter'
+      ? 'https://openrouter.ai/api/v1/chat/completions'
+      : 'https://api.groq.com/openai/v1/chat/completions';
+
+    const defaultModel = provider === 'openrouter' ? 'meta-llama/llama-3.3-70b-instruct' : 'openai/gpt-oss-120b';
+    const selectedModel = model || defaultModel;
+
+    // For Groq, if the requested model is decommissioned or not accessible, auto-try proven active models
+    const candidateModels = provider === 'groq'
+      ? Array.from(new Set([
+          selectedModel,
+          'openai/gpt-oss-120b',
+          'openai/gpt-oss-20b',
+          'qwen/qwen3.8-27b',
+        ]))
+      : [selectedModel];
+
+    let lastError: any = null;
+
+    for (const tryModel of candidateModels) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: tryModel,
+            messages: formattedMessages,
+            temperature: 0.7,
+          }),
+        });
+
+        // Parse Groq rate-limits
+        if (provider === 'groq') {
+          const remainingReq = res.headers.get('x-ratelimit-remaining-requests');
+          const limitReq = res.headers.get('x-ratelimit-limit-requests');
+          const resetReq = res.headers.get('x-ratelimit-reset-requests');
+          if (remainingReq) {
+            const rem = parseInt(remainingReq, 10);
+            const lim = limitReq ? parseInt(limitReq, 10) : undefined;
+            const quotaInfo: ProviderQuotaInfo = {
+              provider: 'meta',
+              remainingRequests: rem,
+              limitRequests: lim,
+              resetTime: resetReq || undefined,
+              status: rem <= 5 ? 'near_limit' : 'ok',
+              lastUpdated: new Date().toISOString(),
+              message: `Groq (${tryModel}) เหลือ: ${rem}/${lim || '?'} คำขอ`,
+            };
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('boai-quota-update', { detail: quotaInfo }));
+            }
+          }
+        }
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const errMsg = err.error?.message || `HTTP ${res.status}`;
+          // If model doesn't exist or was decommissioned, try next candidate
+          if (res.status === 404 || res.status === 400 || errMsg.includes('does not exist') || errMsg.includes('decommissioned')) {
+            console.warn(`[AIService] Groq model "${tryModel}" unavailable: ${errMsg}. Trying fallback model...`);
+            lastError = new Error(errMsg);
+            continue;
+          }
+          if (res.status === 429) {
+            throw new Error(`GROQ_QUOTA_EXHAUSTED: ${errMsg}`);
+          }
+          throw new Error(errMsg);
+        }
+
+        const data = await res.json();
+        // If we succeeded with a fallback model different from original, auto-save settings
+        if (tryModel !== model && provider === 'groq') {
+          const cur = db.getSettings();
+          db.saveSettings({ ...cur, meta_model: tryModel });
+          console.info(`[AIService] Auto-migrated Groq model to "${tryModel}"`);
+        }
+
+        return data.choices?.[0]?.message?.content || 'ไม่ได้รับข้อความจากโมเดล';
+      } catch (err: any) {
+        if (err.message?.includes('GROQ_QUOTA_EXHAUSTED')) {
+          throw err;
+        }
+        lastError = err;
+      }
+    }
+
+    throw lastError || new Error('ไม่สามารถเรียกใช้งานโมเดล Groq ได้');
+  }
+
   // Live Test Provider Connection
   public async testProviderConnection(provider: LLMProvider, customKey?: string): Promise<{ success: boolean; message: string; model?: string }> {
     const settings = db.getSettings();
@@ -305,6 +536,30 @@ export class AIService {
     };
 
     try {
+      if (provider === 'grok') {
+        const key = customKey || settings.grok_api_key;
+        if (!key) {
+          return { success: false, message: 'ยังไม่ได้ระบุ Grok API Key (xAI)' };
+        }
+        const resp = await this.callGrok([testMsg], personality.system_prompt, key, settings.grok_model || 'grok-2-latest');
+        return { success: true, message: resp.trim(), model: settings.grok_model || 'grok-2-latest' };
+      }
+
+      if (provider === 'meta') {
+        const key = customKey || settings.meta_api_key;
+        if (!key) {
+          return { success: false, message: 'ยังไม่ได้ระบุ Meta/Groq API Key (เช่น gsk_...)' };
+        }
+        const activeModel = settings.meta_model || 'openai/gpt-oss-120b';
+        const resp = await this.callMeta([testMsg], personality.system_prompt, key, activeModel, settings.meta_provider || 'groq');
+        const finalSettings = db.getSettings();
+        return {
+          success: true,
+          message: resp.trim(),
+          model: finalSettings.meta_model || activeModel,
+        };
+      }
+
       if (provider === 'gemini') {
         const key = customKey || settings.gemini_api_key;
         if (!key) {

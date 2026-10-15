@@ -21,11 +21,16 @@ interface AssistantStore {
   musicPlaylist: import('../types').PlaylistItem[];
   currentPlaylistIndex: number;
   pendingMemoryAction: import('../types').MemoryPendingAction | null;
+  theme: 'dark' | 'light';
+  grokQuota: import('../types').ProviderQuotaInfo | null;
 
   // Actions
   setState: (state: AssistantState) => void;
   setActiveTab: (tab: AssistantStore['activeTab']) => void;
   setStatusText: (text: string) => void;
+  setTheme: (theme: 'dark' | 'light') => void;
+  toggleTheme: () => void;
+  setGrokQuota: (info: import('../types').ProviderQuotaInfo | null) => void;
   toggleAlwaysListening: () => void;
   toggleMute: () => void;
   loadInitialData: () => void;
@@ -70,10 +75,30 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
   musicPlaylist: DEFAULT_MUSIC_PLAYLIST,
   currentPlaylistIndex: 0,
   pendingMemoryAction: null,
+  theme: (typeof window !== 'undefined' && localStorage.getItem('bo_theme') === 'light') ? 'light' : 'dark',
+  grokQuota: null,
 
   setState: (state) => set({ state }),
   setActiveTab: (activeTab) => set({ activeTab }),
   setStatusText: (statusText) => set({ statusText }),
+  setGrokQuota: (grokQuota) => set({ grokQuota }),
+
+  setTheme: (theme: 'dark' | 'light') => {
+    set({ theme });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bo_theme', theme);
+      document.documentElement.classList.toggle('light', theme === 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+    const settings = db.getSettings();
+    settings.theme = theme;
+    db.saveSettings(settings);
+  },
+
+  toggleTheme: () => {
+    const nextTheme = get().theme === 'dark' ? 'light' : 'dark';
+    get().setTheme(nextTheme);
+  },
 
   setMiniMode: async (enable: boolean) => {
     set({ isMiniMode: enable });
@@ -276,12 +301,24 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
       isAlwaysListening: settings.always_listening,
     });
 
+    // Initialize Theme
+    const savedTheme = (typeof window !== 'undefined' && localStorage.getItem('bo_theme') as 'dark' | 'light') || settings.theme || 'dark';
+    get().setTheme(savedTheme);
+
     // Configure Wake Word
     audioService.setWakeWords(settings.wake_word, settings.alternate_names, settings.sensitivity);
 
     // Register Audio & Electron Listeners once
     if (!isAudioListenersBound) {
       isAudioListenersBound = true;
+
+      if (typeof window !== 'undefined') {
+        window.addEventListener('boai-quota-update', ((e: CustomEvent) => {
+          if (e.detail) {
+            get().setGrokQuota(e.detail);
+          }
+        }) as EventListener);
+      }
 
       // Register Wake Word trigger
       audioService.onWakeWordDetected(() => {

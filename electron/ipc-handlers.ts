@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow, app, shell, screen, Notification } from 'electron';
 import os from 'os';
+import https from 'https';
 
 let normalBounds = { width: 1180, height: 760, x: 100, y: 100 };
 
@@ -148,6 +149,40 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       freeMem: os.freemem(),
       cpus: os.cpus().length,
     };
+  });
+
+  // Native High-Quality Natural Thai Female TTS Proxy
+  ipcMain.handle('fetch-tts', async (_event, text: string) => {
+    try {
+      const encoded = encodeURIComponent((text || '').slice(0, 200));
+      const targetUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=th&client=tw-ob`;
+
+      return new Promise<{ success: boolean; dataUrl?: string; error?: string }>((resolve) => {
+        const req = https.get(targetUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://translate.google.com/'
+          }
+        }, (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', chunk => chunks.push(chunk));
+          res.on('end', () => {
+            const buf = Buffer.concat(chunks);
+            const base64 = buf.toString('base64');
+            resolve({
+              success: true,
+              dataUrl: `data:audio/mpeg;base64,${base64}`
+            });
+          });
+        });
+
+        req.on('error', (err) => {
+          resolve({ success: false, error: err.message });
+        });
+      });
+    } catch (e: any) {
+      return { success: false, error: e?.message };
+    }
   });
 }
 

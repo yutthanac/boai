@@ -91,8 +91,8 @@ export const Conversation: React.FC = () => {
       <div className="flex-1 overflow-y-auto my-4 space-y-4 pr-2">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-500">
-            <div className="w-16 h-16 rounded-2xl bg-slate-800/80 p-2 border border-white/10 flex items-center justify-center mb-3 shadow-sm">
-              <img src="/assets/images/dog.png" alt="Bo AI Dog" className="w-full h-full object-contain" />
+            <div className="w-16 h-16 rounded-2xl bg-white p-2 border border-white/20 flex items-center justify-center mb-3 shadow-md">
+              <img src="/bobo.png" alt="Bo AI" className="w-full h-full object-contain" />
             </div>
             <p className="text-sm font-medium text-slate-300">ยังไม่มีข้อความในการสนทนานี้</p>
             <p className="text-xs text-slate-500 mt-1">
@@ -108,8 +108,8 @@ export const Conversation: React.FC = () => {
               <div key={msg.id} className="space-y-2">
                 <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
                   {!isUser && (
-                    <div className="w-8 h-8 rounded-xl bg-slate-800 border border-white/10 p-1 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
-                      <img src="/assets/images/dog.png" alt="Bo AI" className="w-full h-full object-contain" />
+                    <div className="w-8 h-8 rounded-xl bg-white border border-white/20 p-1 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                      <img src="/bobo.png" alt="Bo AI" className="w-full h-full object-contain" />
                     </div>
                   )}
 

@@ -448,8 +448,8 @@ export const TrainingStudio: React.FC = () => {
               ตัวอย่างโปรไฟล์ผู้ช่วย
             </h3>
             <div className="p-4 rounded-xl bg-[#0B0F19] border border-white/[0.06] flex flex-col items-center text-center">
-              <div className="w-16 h-16 rounded-full overflow-hidden bg-slate-900 border border-white/20 p-1 flex items-center justify-center mb-3 shadow-md">
-                <img src="/assets/images/dog.png" alt="Profile" className="w-full h-full object-contain" />
+              <div className="w-16 h-16 rounded-full overflow-hidden bg-white border border-white/20 p-1 flex items-center justify-center mb-3 shadow-md">
+                <img src="/bobo.png" alt="Profile" className="w-full h-full object-contain" />
               </div>
               <p className="text-base font-bold text-white">{personality.name}</p>
               <p className="text-xs text-violet-400 mt-0.5">{personality.speaking_style}</p>

@@ -15,7 +15,7 @@ import { Tools } from './pages/Tools';
 import { Settings } from './pages/Settings';
 
 export const App: React.FC = () => {
-  const { activeTab, setActiveTab, loadInitialData, startVoiceInteraction, state, isMiniMode, toggleMiniMode } = useAssistantStore();
+  const { activeTab, setActiveTab, loadInitialData, startVoiceInteraction, state, isMiniMode, toggleMiniMode, theme } = useAssistantStore();
 
   useEffect(() => {
     loadInitialData();
@@ -86,7 +86,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#07090E] text-slate-100 overflow-hidden select-none font-sans">
+    <div className={`flex flex-col h-screen w-screen bg-[#07090E] text-slate-100 overflow-hidden select-none font-sans transition-colors duration-200 ${theme === 'light' ? 'theme-light light' : 'theme-dark dark'}`}>
       {/* Window Title Bar */}
       <WindowFrame />
 

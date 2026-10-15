@@ -197,8 +197,8 @@ export const VoiceDevices: React.FC = () => {
           <div className="glass-panel p-5 rounded-2xl border border-white/[0.08] space-y-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-slate-800 p-1 border border-white/10 flex items-center justify-center shrink-0">
-                  <img src="/assets/images/dog.png" alt="" className="w-full h-full object-contain" />
+                <div className="w-8 h-8 rounded-lg bg-white p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-xs">
+                  <img src="/bobo.png" alt="" className="w-full h-full object-contain" />
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold text-white">Wake Word Detection</h2>

@@ -14,13 +14,29 @@ import {
 import { db } from '../services/db/databaseService';
 
 export const Home: React.FC = () => {
-  const { setActiveTab, startVoiceInteraction, messages } = useAssistantStore();
+  const { setActiveTab, startVoiceInteraction, messages, grokQuota } = useAssistantStore();
   const settings = db.getSettings();
   const personality = db.getPersonality();
   const memories = db.getMemories();
   const knowledge = db.getKnowledge();
 
   const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+
+  const getModelDisplayName = () => {
+    switch (settings.llm_provider) {
+      case 'grok':
+        return `xAI Grok (${settings.grok_model || 'grok-2-latest'})`;
+      case 'meta':
+        return `Groq / Meta (${(settings.meta_model || 'openai/gpt-oss-120b').replace('openai/', '')})`;
+      case 'openai':
+        return `OpenAI (${settings.openai_model || 'gpt-4o'})`;
+      case 'claude':
+        return `Claude (${settings.claude_model || 'claude-3-5-sonnet'})`;
+      case 'gemini':
+      default:
+        return `Google Gemini (${settings.gemini_model || 'gemini-flash-lite'})`;
+    }
+  };
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
@@ -35,8 +51,25 @@ export const Home: React.FC = () => {
               Desktop AI Assistant
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            คำเรียกหลัก: <span className="text-cyan-400 font-medium">"{settings.wake_word}"</span> • โมเดลหลัก: <span className="text-indigo-400 font-medium">Claude 3.5 Sonnet</span>
+          <p className="text-xs text-slate-400 mt-1 flex items-center flex-wrap gap-2">
+            <span>คำเรียกหลัก: <span className="text-cyan-400 font-medium">"{settings.wake_word}"</span></span>
+            <span>•</span>
+            <span>โมเดลหลัก: <span className="text-indigo-400 font-medium">{getModelDisplayName()}</span></span>
+            {settings.llm_provider === 'grok' && grokQuota && (
+              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-mono ${
+                grokQuota.status === 'exhausted'
+                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  : grokQuota.status === 'near_limit'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+              }`}>
+                {grokQuota.status === 'exhausted'
+                  ? 'โควต้า Grok หมด (Auto-fallback Gemini)'
+                  : grokQuota.status === 'near_limit'
+                  ? `โควต้า Grok ใกล้หมด (เหลือ ${grokQuota.remainingRequests} ครั้ง)`
+                  : `โควต้า Grok ปกติ (${grokQuota.remainingRequests ?? 'OK'})`}
+              </span>
+            )}
           </p>
         </div>
 
@@ -66,8 +99,8 @@ export const Home: React.FC = () => {
         {/* Last message callout */}
         {lastMessage && (
           <div className="mt-4 max-w-lg w-full p-3 rounded-xl bg-surface-elevated/70 border border-white/[0.06] flex items-start gap-3">
-            <div className="w-6 h-6 rounded-md bg-slate-800 p-0.5 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
-              <img src="/assets/images/dog.png" alt="" className="w-full h-full object-contain" />
+            <div className="w-6 h-6 rounded-md bg-white p-0.5 border border-white/20 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+              <img src="/bobo.png" alt="" className="w-full h-full object-contain" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[10px] uppercase font-semibold text-slate-400">

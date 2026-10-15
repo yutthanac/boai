@@ -18,17 +18,23 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  Zap
+  Zap,
+  Sun,
+  Moon,
+  Palette
 } from 'lucide-react';
 import { audioService } from '../services/audio/audioService';
 import { aiService } from '../services/ai/aiService';
+import { useAssistantStore } from '../stores/useAssistantStore';
 
 export const Settings: React.FC = () => {
+  const { theme, setTheme, grokQuota } = useAssistantStore();
   const [settings, setSettings] = useState<AppSettings>(db.getSettings());
   const [showKey, setShowKey] = useState<{ [k: string]: boolean }>({});
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isTestingTts, setIsTestingTts] = useState(false);
+  const [ttsFeedback, setTtsFeedback] = useState<string | null>(null);
   const [isTestingApi, setIsTestingApi] = useState<string | null>(null);
   const [apiTestResult, setApiTestResult] = useState<{ provider: string; success: boolean; message: string; model?: string } | null>(null);
 
@@ -42,14 +48,34 @@ export const Settings: React.FC = () => {
     db.saveSettings(settings);
     const res = await aiService.testProviderConnection(provider);
     setApiTestResult({ provider, ...res });
+    setSettings(db.getSettings());
     setIsTestingApi(null);
   };
 
   const handleTestTts = async () => {
     setIsTestingTts(true);
+    setTtsFeedback(null);
     db.saveSettings(settings);
-    await audioService.speak('สวัสดีจ้า เราคือโบ้เพื่อนแกนะ มีเรื่องอะไรให้เราช่วยบอกมาได้เลย', settings.tts_rate, settings.tts_pitch);
-    setIsTestingTts(false);
+
+    if (settings.tts_engine === 'openai' && !settings.openai_api_key) {
+      setTtsFeedback('💡 ยังไม่ได้ใส่ OpenAI API Key หรือเครดิตหมด ระบบจะใช้เสียงธรรมชาติฟรีแทน');
+    } else if (settings.tts_engine === 'grok' && !settings.grok_api_key) {
+      setTtsFeedback('💡 ยังไม่ได้ใส่ xAI Grok API Key ระบบจะใช้เสียงธรรมชาติฟรีแทน');
+    }
+
+    try {
+      await audioService.speak('สวัสดีจ้า เราคือโบ้เพื่อนแกนะ มีเรื่องอะไรให้เราช่วยบอกมาได้เลย', settings.tts_rate, settings.tts_pitch);
+    } catch (e: any) {
+      setTtsFeedback(`เกิดข้อผิดพลาด: ${e?.message || 'Error'}`);
+    } finally {
+      setIsTestingTts(false);
+    }
+  };
+
+  const handleApplyGrokFreePreset = () => {
+    audioService.applyGrokFreePreset();
+    setSettings(db.getSettings());
+    alert('⚡ เปิดใช้งานพรีเซ็ตเสียง & สำเนียงสไตล์ Grok เรียบร้อยแล้ว! (ฟรี 100% ไม่ต้องใช้ API Key โดยปรับสปีด 1.25x และเพิ่มความฉลาด/กวน)');
   };
 
   const handleSave = () => {
@@ -134,24 +160,33 @@ export const Settings: React.FC = () => {
 
           {/* Provider Selector */}
           <div className="space-y-2">
-            <label className="text-xs font-medium text-slate-300">ผู้ให้บริการหลัก</label>
-            <div className="grid grid-cols-3 gap-2">
+            <label className="text-xs font-medium text-slate-300">ผู้ให้บริการหลัก (LLM Provider)</label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {[
-                { id: 'gemini', name: 'Google Gemini', desc: '3.6 / 3.5 Flash (ฟรี แนะนำ)' },
-                { id: 'openai', name: 'OpenAI', desc: 'GPT-4o' },
-                { id: 'claude', name: 'Claude (Anthropic)', desc: 'Sonnet 3.5' },
+                { id: 'gemini', name: 'Google Gemini', desc: 'Flash Lite / 3.5 (ฟรี แนะนำ)', badge: 'ฟรี แนะนำ' },
+                { id: 'grok', name: 'xAI Grok', desc: 'Grok-2 / Grok Beta (ฉลาด ลึกซึ้ง)', badge: 'ถามตอบลึกซึ้ง' },
+                { id: 'meta', name: 'Meta Llama', desc: 'Llama 3.3 70B (Groq เร็วมาก)', badge: 'โอเพนซอร์ส' },
+                { id: 'openai', name: 'OpenAI', desc: 'GPT-4o / GPT-4o-mini', badge: 'มาตรฐาน' },
+                { id: 'claude', name: 'Claude', desc: 'Sonnet 3.5 / Haiku', badge: 'วิเคราะห์คม' },
               ].map((p) => (
                 <button
                   key={p.id}
                   onClick={() => setSettings({ ...settings, llm_provider: p.id as LLMProvider })}
-                  className={`p-3 rounded-xl border text-left transition-all ${
+                  className={`p-3 rounded-xl border text-left transition-all relative ${
                     settings.llm_provider === p.id
-                      ? 'bg-indigo-600/30 border-indigo-500/60 text-white shadow-sm'
+                      ? 'bg-indigo-600/30 border-indigo-500/60 text-white shadow-sm ring-1 ring-indigo-500/40'
                       : 'bg-surface-elevated/70 border-white/[0.04] text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <p className="text-xs font-semibold">{p.name}</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{p.desc}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold">{p.name}</p>
+                    {p.badge && (
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300">
+                        {p.badge}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">{p.desc}</p>
                 </button>
               ))}
             </div>
@@ -178,6 +213,24 @@ export const Settings: React.FC = () => {
                 ทดสอบเชื่อมต่อ
               </button>
             </div>
+
+            {/* Test result feedback banner */}
+            {apiTestResult?.provider === 'gemini' && (
+              <div className={`p-2 rounded-lg text-xs flex items-start gap-2 border ${
+                apiTestResult.success
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}>
+                {apiTestResult.success ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-400" /> : <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-400" />}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[11px]">
+                    {apiTestResult.success ? `เชื่อมต่อสำเร็จ! (โมเดล: ${apiTestResult.model || settings.gemini_model})` : 'การเชื่อมต่อล้มเหลว'}
+                  </div>
+                  <div className="text-[10px] opacity-85 mt-0.5 leading-relaxed">{apiTestResult.message}</div>
+                </div>
+              </div>
+            )}
+
             <div className="relative">
               <input
                 type={showKey.gemini ? 'text' : 'password'}
@@ -196,6 +249,249 @@ export const Settings: React.FC = () => {
             </div>
             <p className="text-[10px] text-slate-400 leading-relaxed">
               รองรับทั้ง Auth Key แบบใหม่ของ Google AI Studio (<code className="text-cyan-400">AQ...</code>) และคีย์ดั้งเดิม (<code className="text-slate-300">AIzaSy...</code>)
+            </p>
+          </div>
+
+          {/* Grok (xAI) API Key & Quota Monitor */}
+          <div className="space-y-2 rounded-xl p-3 bg-surface-elevated/50 border border-white/[0.04]">
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1.5">
+                <label className="font-medium text-slate-200">xAI Grok API Key</label>
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/20 text-purple-300 font-medium">ลึกซึ้ง & มีไหวพริบ</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleTestApi('grok')}
+                disabled={isTestingApi === 'grok'}
+                className="px-2.5 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 border border-purple-500/30 text-[10px] flex items-center gap-1 transition-all disabled:opacity-50"
+              >
+                {isTestingApi === 'grok' ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Zap className="w-3 h-3 text-purple-400" />
+                )}
+                ทดสอบเชื่อมต่อ
+              </button>
+            </div>
+
+            {/* Test result feedback banner */}
+            {apiTestResult?.provider === 'grok' && (
+              <div className={`p-2 rounded-lg text-xs flex items-start gap-2 border ${
+                apiTestResult.success
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}>
+                {apiTestResult.success ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-400" /> : <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-400" />}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[11px]">
+                    {apiTestResult.success ? `เชื่อมต่อสำเร็จ! (โมเดล: ${apiTestResult.model || settings.grok_model})` : 'การเชื่อมต่อล้มเหลว'}
+                  </div>
+                  <div className="text-[10px] opacity-85 mt-0.5 leading-relaxed">{apiTestResult.message}</div>
+                </div>
+              </div>
+            )}
+            <div className="relative">
+              <input
+                type={showKey.grok ? 'text' : 'password'}
+                value={settings.grok_api_key || ''}
+                onChange={(e) => setSettings({ ...settings, grok_api_key: e.target.value })}
+                placeholder="xai-..."
+                className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2 pr-10 text-xs text-white focus:outline-none focus:border-purple-500/50 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => toggleShowKey('grok')}
+                className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+              >
+                {showKey.grok ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {/* Grok Model Selector */}
+            <div className="flex items-center justify-between text-xs pt-1">
+              <span className="text-[11px] text-slate-400">เลือกรุ่นโมเดล Grok:</span>
+              <div className="flex gap-1.5">
+                {[
+                  { id: 'grok-2-latest', label: 'Grok-2 Latest' },
+                  { id: 'grok-2', label: 'Grok-2' },
+                  { id: 'grok-beta', label: 'Grok Beta' },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSettings({ ...settings, grok_model: m.id })}
+                    className={`px-2 py-0.5 rounded-md text-[10px] border transition-all ${
+                      (settings.grok_model || 'grok-2-latest') === m.id
+                        ? 'bg-purple-500/20 border-purple-400/60 text-purple-300 font-medium'
+                        : 'bg-white/[0.02] border-white/[0.04] text-slate-400'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Grok Live Quota / Rate-limit Status Card */}
+            <div className="mt-2 p-2.5 rounded-lg bg-slate-900/80 border border-purple-500/20 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${
+                    grokQuota?.status === 'exhausted'
+                      ? 'bg-rose-500 animate-ping'
+                      : grokQuota?.status === 'near_limit'
+                      ? 'bg-amber-400 animate-pulse'
+                      : 'bg-emerald-400'
+                  }`} />
+                  สถานะข้อจำกัด & โควต้าของ Grok:
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-medium ${
+                  grokQuota?.status === 'exhausted'
+                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                    : grokQuota?.status === 'near_limit'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                }`}>
+                  {grokQuota?.status === 'exhausted'
+                    ? 'โควต้าหมด (Auto-Fallback)'
+                    : grokQuota?.status === 'near_limit'
+                    ? 'ใกล้หมด'
+                    : 'พร้อมใช้งาน'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 pt-1">
+                <div>
+                  คำขอที่เหลือ: <span className="font-mono text-purple-300 font-semibold">{grokQuota?.remainingRequests ?? 'ตรวจจับตอนเรียก'}</span>
+                  {grokQuota?.limitRequests && ` / ${grokQuota.limitRequests}`}
+                </div>
+                <div>
+                  เวลา Reset: <span className="font-mono text-slate-300">{grokQuota?.resetTime ? `${grokQuota.resetTime}s` : 'อัตโนมัติ'}</span>
+                </div>
+              </div>
+
+              <p className="text-[9px] text-slate-400 italic">
+                * หากข้อจำกัดของ Grok หมด ระบบจะแจ้งเตือนและสลับไปตอบด้วยโมเดลสำรอง (Gemini) ให้อัตโนมัติทันที
+              </p>
+            </div>
+          </div>
+
+          {/* Groq LPU / Meta API Key & Settings */}
+          <div className="space-y-2 rounded-xl p-3 bg-surface-elevated/50 border border-white/[0.04]">
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1.5">
+                <label className="font-medium text-slate-200">Groq LPU / Meta Key</label>
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-500/20 text-blue-300 font-medium">เร็วสูงสุด ~300 T/s</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleTestApi('meta')}
+                disabled={isTestingApi === 'meta'}
+                className="px-2.5 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/30 text-[10px] flex items-center gap-1 transition-all disabled:opacity-50"
+              >
+                {isTestingApi === 'meta' ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Zap className="w-3 h-3 text-blue-400" />
+                )}
+                ทดสอบเชื่อมต่อ
+              </button>
+            </div>
+
+            {/* Test result feedback banner */}
+            {apiTestResult?.provider === 'meta' && (
+              <div className={`p-2 rounded-lg text-xs flex items-start gap-2 border ${
+                apiTestResult.success
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}>
+                {apiTestResult.success ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-400" /> : <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-400" />}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[11px]">
+                    {apiTestResult.success ? `เชื่อมต่อสำเร็จ! (โมเดล: ${apiTestResult.model || settings.meta_model})` : 'การเชื่อมต่อล้มเหลว'}
+                  </div>
+                  <div className="text-[10px] opacity-85 mt-0.5 leading-relaxed">{apiTestResult.message}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Provider Switch: Groq vs OpenRouter */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSettings({ ...settings, meta_provider: 'groq' })}
+                className={`flex-1 py-1 px-2 rounded-lg text-[10px] border transition-all ${
+                  (settings.meta_provider || 'groq') === 'groq'
+                    ? 'bg-blue-500/20 border-blue-400/60 text-blue-300 font-medium'
+                    : 'bg-white/[0.02] border-white/[0.04] text-slate-400'
+                }`}
+              >
+                Groq API (ชิป LPU เร็วพิเศษ ~300 T/s)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettings({ ...settings, meta_provider: 'openrouter' })}
+                className={`flex-1 py-1 px-2 rounded-lg text-[10px] border transition-all ${
+                  settings.meta_provider === 'openrouter'
+                    ? 'bg-blue-500/20 border-blue-400/60 text-blue-300 font-medium'
+                    : 'bg-white/[0.02] border-white/[0.04] text-slate-400'
+                }`}
+              >
+                OpenRouter API
+              </button>
+            </div>
+
+            <div className="relative">
+              <input
+                type={showKey.meta ? 'text' : 'password'}
+                value={settings.meta_api_key || ''}
+                onChange={(e) => setSettings({ ...settings, meta_api_key: e.target.value })}
+                placeholder={settings.meta_provider === 'openrouter' ? 'sk-or-v1-...' : 'gsk_...'}
+                className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2 pr-10 text-xs text-white focus:outline-none focus:border-blue-500/50 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => toggleShowKey('meta')}
+                className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+              >
+                {showKey.meta ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {/* Meta Model Selector */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[11px] text-slate-400">เลือกรุ่นโมเดลที่ต้องการ:</span>
+                <span className="text-[10px] text-cyan-400 font-mono">
+                  {settings.meta_model || 'openai/gpt-oss-120b'}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B ★ แนะนำ (ฉลาด & เร็วมาก)' },
+                  { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B (เร็วพิเศษ)' },
+                  { id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B' },
+                  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
+                  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B' },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSettings({ ...settings, meta_model: m.id })}
+                    className={`px-2 py-0.5 rounded-md text-[10px] border transition-all ${
+                      (settings.meta_model || 'openai/gpt-oss-120b') === m.id
+                        ? 'bg-blue-500/20 border-blue-400/60 text-blue-300 font-medium'
+                        : 'bg-white/[0.02] border-white/[0.04] text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[10px] text-slate-400 leading-relaxed pt-1">
+              💡 <span className="text-slate-300 font-medium">หมายเหตุ:</span> Groq ได้เปิดให้ใช้งาน <code className="text-cyan-400">openai/gpt-oss-120b</code> และ <code className="text-cyan-400">openai/gpt-oss-20b</code> เป็นโมเดลหลักบนชิป LPU ประมวลผลภาษาไทยได้ดีเยี่ยมและรวดเร็วมาก หากโมเดลใดปิดให้บริการ ระบบจะ Auto-Fallback สลับโมเดลที่ใช้งานได้ให้อัตโนมัติทันที
             </p>
           </div>
 
@@ -312,10 +608,30 @@ export const Settings: React.FC = () => {
               </div>
             </div>
 
+            {/* Grok Style Free Preset Callout (No API Key Required) */}
+            <div className="p-3 rounded-xl bg-purple-950/25 border border-purple-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-purple-200">⚡ อยากได้เสียง & จังหวะการพูดสไตล์ Grok ฟรี?</span>
+                  <span className="px-1.5 py-0.2 rounded text-[8px] bg-purple-500/30 text-purple-300 font-bold">100% ฟรี</span>
+                </div>
+                <p className="text-[10px] text-slate-300">
+                  ปรับสปีด 1.25x (ฉะฉาน) + ปรับคาแรกเตอร์กระชับ ฉลาด และกวนนิดๆ สไตล์ Grok โดยไม่ต้องใช้ API Key
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleApplyGrokFreePreset}
+                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-medium text-xs shadow-sm transition-all whitespace-nowrap shrink-0"
+              >
+                เปิดใช้สไตล์ Grok ฟรี
+              </button>
+            </div>
+
             {/* TTS Engine Selector */}
             <div className="space-y-2">
               <label className="text-xs font-medium text-slate-300">เครื่องยนต์เสียง (TTS Engine)</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
                   type="button"
                   onClick={() => setSettings({ ...settings, tts_engine: 'natural_female' })}
@@ -325,11 +641,26 @@ export const Settings: React.FC = () => {
                       : 'bg-surface-elevated/70 border-white/[0.04] text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <p className="text-xs font-semibold">เสียงธรรมชาติ</p>
-                    <span className="px-1 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 font-bold">ฟรี แนะนำ</span>
+                    <span className="px-1 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 font-bold">ฟรี</span>
                   </div>
-                  <p className="text-[10px] text-cyan-300 mt-0.5">เสียงผู้หญิงคมชัด ลื่นไหล ไม่เสียเงิน</p>
+                  <p className="text-[10px] text-cyan-300 mt-0.5">คมชัด ลื่นไหล ไม่เสียเงิน</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettings({ ...settings, tts_engine: 'grok' })}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    settings.tts_engine === 'grok'
+                      ? 'bg-purple-600/30 border-purple-500/60 text-white shadow-sm'
+                      : 'bg-surface-elevated/70 border-white/[0.04] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-semibold">Grok Voice</p>
+                    <span className="px-1 py-0.2 rounded text-[8px] bg-purple-500/20 text-purple-300 font-bold">xAI Key</span>
+                  </div>
+                  <p className="text-[10px] text-purple-300 mt-0.5">เสียงแท้ xAI Grok</p>
                 </button>
                 <button
                   type="button"
@@ -341,7 +672,7 @@ export const Settings: React.FC = () => {
                   }`}
                 >
                   <p className="text-xs font-semibold">OpenAI TTS</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">ChatGPT (ต้องเติมเงิน)</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">ChatGPT Voice</p>
                 </button>
                 <button
                   type="button"
@@ -357,6 +688,47 @@ export const Settings: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Grok Voice Options (When Grok engine is selected) */}
+            {settings.tts_engine === 'grok' && (
+              <div className="p-3 rounded-xl bg-surface-elevated border border-purple-500/30 space-y-3">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <label className="font-medium text-slate-200">เลือกเสียง Grok (xAI Voice)</label>
+                    <span className="text-[10px] text-purple-400 font-mono">
+                      xai.grok-tts
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {[
+                      { id: 'leo', name: 'Leo', desc: 'ชาย สุขุม ชัดเจน มั่นใจ' },
+                      { id: 'rex', name: 'Rex', desc: 'ชาย พลังเยอะ กระฉับกระเฉง' },
+                      { id: 'ara', name: 'Ara', desc: 'หญิง อบอุ่น มีเสน่ห์' },
+                      { id: 'eve', name: 'Eve', desc: 'หญิง ฉะฉาน เป็นมิตร' },
+                      { id: 'sal', name: 'Sal', desc: 'กลางๆ ชัดถ้อยชัดคำ' },
+                    ].map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setSettings({ ...settings, grok_tts_voice: v.id as any })}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          (settings.grok_tts_voice || 'leo') === v.id
+                            ? 'bg-purple-500/20 border-purple-400/50 text-white'
+                            : 'bg-white/[0.02] border-white/[0.04] text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <p className="text-xs font-medium">{v.name}</p>
+                        <p className="text-[9px] text-slate-400 truncate">{v.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-400">
+                  * จะใช้ xAI Grok API Key ที่ระบุในกล่อง xAI Grok ด้านซ้ายเพื่อดึงเสียงแท้จาก xAI
+                </p>
+              </div>
+            )}
 
             {/* OpenAI Voice Options (When OpenAI engine is selected) */}
             {settings.tts_engine === 'openai' && (
@@ -429,7 +801,7 @@ export const Settings: React.FC = () => {
             )}
 
             {/* Test Voice Button */}
-            <div className="pt-1">
+            <div className="pt-1 space-y-2">
               <button
                 type="button"
                 onClick={handleTestTts}
@@ -439,6 +811,12 @@ export const Settings: React.FC = () => {
                 <Volume2 className="w-3.5 h-3.5" />
                 {isTestingTts ? 'กำลังเล่นเสียงตัวอย่าง...' : 'ทดลองฟังเสียงสังเคราะห์ (Test Audio)'}
               </button>
+              {ttsFeedback && (
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{ttsFeedback}</span>
+                </div>
+              )}
             </div>
 
             {/* TTS Speed */}
@@ -497,6 +875,63 @@ export const Settings: React.FC = () => {
               <p className="text-[10px] text-slate-500">
                 ระยะเวลาที่รอเสียงเงียบก่อนจะถือว่าพูดจบคำสั่งและส่งไปประมวลผล
               </p>
+            </div>
+          </div>
+
+          {/* Section 2.5: Theme Selection (ธีมสว่าง / ธีมมืด) */}
+          <div className="glass-panel p-5 rounded-2xl border border-white/[0.08] space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+                <Palette className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-white">ธีมหน้าจอ (Appearance & Theme)</h2>
+                <p className="text-[11px] text-slate-400">เลือกระหว่างธีมมืด (Dark) สบายตา หรือธีมสว่าง (Light) สดใส</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setTheme('dark');
+                  setSettings({ ...settings, theme: 'dark' });
+                }}
+                className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all ${
+                  theme === 'dark'
+                    ? 'bg-indigo-600/25 border-indigo-500/60 text-white shadow-md'
+                    : 'bg-surface-elevated/70 border-white/[0.06] text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${theme === 'dark' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-800 text-slate-400'}`}>
+                  <Moon className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-semibold text-white">ธีมมืด (Dark Theme)</p>
+                  <p className="text-[10px] text-slate-400">พื้นหลังสีอวกาศ สบายตา</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTheme('light');
+                  setSettings({ ...settings, theme: 'light' });
+                }}
+                className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all ${
+                  theme === 'light'
+                    ? 'bg-amber-500/20 border-amber-400/60 text-slate-900 shadow-md'
+                    : 'bg-surface-elevated/70 border-white/[0.06] text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${theme === 'light' ? 'bg-amber-400/20 text-amber-500' : 'bg-slate-800 text-slate-400'}`}>
+                  <Sun className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-semibold text-white">ธีมสว่าง (Light Theme)</p>
+                  <p className="text-[10px] text-slate-400">พื้นหลังสีขาวคลีน สบายตา</p>
+                </div>
+              </button>
             </div>
           </div>
 
