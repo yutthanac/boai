@@ -454,7 +454,25 @@
      - หากเลือก OpenAI TTS แต่คีย์หมดเครดิต หรือเลือก Grok Voice แต่ไม่มีคีย์ ระบบจะแสดงกล่องข้อความเตือนให้ผู้ใช้ทราบทันทีว่าสลับมาใช้เสียงธรรมชาติแทน
 - **สถานะ:** ทดสอบยิงเสียงผ่าน IPC สำเร็จ 100%, Build ผ่าน 100% (`npm run build` สำเร็จ 0 errors)
 
+### 24. แก้ปัญหา Push ขึ้น GitHub ไม่ได้ (GitHub Push Protection GH013 & Secret Scanning) 🔐🚀
+- **ปัญหาที่พบ:**
+  - เมื่อสั่ง `git push` โดน GitHub ปฏิเสธคำขอด้วยข้อผิดพลาด:
+    `remote: error: GH013: Repository rule violations found for refs/heads/main.`
+    `remote: - GITHUB PUSH PROTECTION: Push cannot contain secrets (Groq API Key in databaseService.ts)`
+- **การวิเคราะห์สาเหตุ (Root Cause Analysis):**
+  - ในโค้ดก่อนหน้า มีการระบุ Groq API Key จริงลงในตัวแปร Default ของ [`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts) โดยตรง
+  - ทาง GitHub มีระบบ Secret Scanning & Push Protection เปิดใช้งานอยู่ ซึ่งจะตรวจจับ Key รูปแบบ `gsk_...` ใน Commit และปฏิเสธการ Push ทันทีเพื่อความปลอดภัยของบัญชีผู้ใช้
+- **การแก้ไขและจัดการความปลอดภัย:**
+  1. **ย้าย Secret ไปเก็บใน `.env`:** ย้าย `VITE_GROQ_API_KEY` ไปไว้ในไฟล์ `.env` ในเครื่อง (ซึ่งถูก Ignore ไว้ใน `.gitignore` เรียบร้อยแล้ว จะไม่ถูก Track หรือส่งขึ้น Git)
+  2. **ปรับแต่ง Template:** เพิ่มตัวแปร Placeholder ใน [`.env.example`](file:///c:/Anewproject/boai/.env.example) เพื่อเป็นแนวทางให้ระบบ
+  3. **ลบคีย์ออกจาก Source Code:** ปรับ Default ใน [`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts) ให้ดึงจาก `import.meta.env.VITE_GROQ_API_KEY || ''`
+  4. **ทำความสะอาด Git Tree:** ปรับแต่ง Commit History เอา Commit ที่ติด Secret ออก และทำ Commit สะอาดตัวใหม่ขึ้นแทน พร้อมลบไฟล์ Cache ของ Vite ที่ไม่จำเป็น
+- **ผลการทดสอบ:**
+  - สั่ง `git push origin main` สำเร็จ 100% (`cd2c605..6553db8 main -> main`)
+  - รัน `npm run build` ผ่าน 100% ไม่มี Error
+
 ---
 *บันทึกล่าสุด: 16 ตุลาคม 2026*
+
 
 
