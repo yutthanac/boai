@@ -18,3 +18,24 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface Window {
+  electronAPI?: {
+    minimize: () => void;
+    maximize: () => void;
+    close: () => void;
+    setAutoStart: (enable: boolean) => Promise<boolean>;
+    getSystemInfo: () => Promise<any>;
+    openExternal: (url: string) => Promise<boolean>;
+    setMiniMode: (enable: boolean) => Promise<boolean>;
+    showNotification: (title: string, body: string) => Promise<boolean>;
+    sendMediaCommand: (command: string) => Promise<boolean>;
+    searchYouTube: (query: string) => Promise<string | null>;
+    onWakeWordTriggered: (callback: () => void) => void;
+    onMiniModeChanged: (callback: (isMini: boolean) => void) => void;
+    onToggleMiniModeTrigger: (callback: () => void) => void;
+    onToggleMuteFromTray: (callback: () => void) => void;
+    onMediaCommandReceived: (callback: (command: string) => void) => void;
+  };
+}
+

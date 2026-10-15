@@ -1,8 +1,8 @@
-import { Minus, Square, X, Volume2, Mic, MicOff } from 'lucide-react';
+import { Minus, Square, X, Volume2, Mic, MicOff, Minimize2 } from 'lucide-react';
 import { useAssistantStore } from '../stores/useAssistantStore';
 
 export const WindowFrame: React.FC = () => {
-  const { state, statusText, isMuted, toggleMute, isAlwaysListening } = useAssistantStore();
+  const { state, statusText, isMuted, toggleMute, isAlwaysListening, toggleMiniMode } = useAssistantStore();
 
   const getStateBadge = () => {
     switch (state) {
@@ -74,6 +74,14 @@ export const WindowFrame: React.FC = () => {
         </button>
 
         <div className="h-3.5 w-px bg-white/10 mx-1" />
+
+        <button
+          onClick={toggleMiniMode}
+          title="โหมดลูกแก้วลอย (Floating Orb) — Ctrl+Shift+B"
+          className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors"
+        >
+          <Minimize2 className="w-3.5 h-3.5" />
+        </button>
 
         <button
           title="ย่อหน้าต่าง"

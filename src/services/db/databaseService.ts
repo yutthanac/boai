@@ -5,6 +5,9 @@ import {
   ExampleTrainingItem,
   KnowledgeItem,
   MemoryItem,
+  MemoryCategory,
+  MemoryAuditLog,
+  TrainingDataset,
   PersonalityConfig,
   ReminderItem
 } from '../../types';
@@ -18,11 +21,12 @@ const STORAGE_KEYS = {
   EXAMPLES: 'boai_examples',
   PERSONALITY: 'boai_personality',
   REMINDERS: 'boai_reminders',
+  AUDIT_LOGS: 'boai_memory_audit_logs',
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
   wake_word: 'โบ้',
-  alternate_names: ['ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'Bo AI', 'โบไอ', 'Hey Bo'],
+  alternate_names: ['ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'ไอ้โบว์', 'ไอโบว์', 'น้องโบว์', 'โบว์', 'Bo AI', 'โบไอ', 'Hey Bo'],
   sensitivity: 75,
   always_listening: true,
   llm_provider: 'gemini',
@@ -36,13 +40,14 @@ const DEFAULT_SETTINGS: AppSettings = {
   output_device_id: 'default',
   auto_start: true,
   privacy_mode: true,
-  tts_rate: 1.0,
+  tts_rate: 1.20,
   tts_pitch: 1.0,
   tts_voice: 'th-TH',
   tts_engine: 'natural_female',
   openai_tts_voice: 'nova',
   openai_tts_model: 'tts-1-hd',
   vad_timeout_ms: 3000,
+  mini_mode_hotkey: 'Alt+Space',
 };
 
 const DEFAULT_PERSONALITY: PersonalityConfig = {
@@ -50,6 +55,12 @@ const DEFAULT_PERSONALITY: PersonalityConfig = {
   system_prompt: `คุณคือ "โบ้" เพื่อนสนิทคู่หูของผู้ใช้ เป็นคนจริงใจ อารมณ์ดี ฉลาด เป็นกันเอง คุยสบายๆ เหมือนเพื่อนแท้ที่นั่งข้างๆ ไม่พูดทางการแบบคอลเซ็นเตอร์ ไม่ประดิษฐ์คำ ตอบกระชับ ได้ใจความ ตรงประเด็นทันที ช่วยคิด ช่วยเตือน คุยเล่นได้ทุกเรื่อง และไม่พูดถึงชื่อโมเดลหรือระบบ AI หรือ Gemini หรือ Claude เด็ดขาด`,
   speaking_style: 'เป็นเพื่อนสนิท อารมณ์ดี จริงใจ สบายๆ คุยเป็นธรรมชาติเหมือนเพื่อนคุยกัน',
   formality_level: 1,
+  tuning: {
+    wittiness: 65,
+    friendliness: 85,
+    formality: 20,
+    conciseness: 80,
+  },
 };
 
 const DEFAULT_MEMORIES: MemoryItem[] = [
@@ -58,6 +69,9 @@ const DEFAULT_MEMORIES: MemoryItem[] = [
     content: 'ผู้ใช้ชอบทำงานในสภาพแวดล้อม Dark Theme และเน้นการพิมพ์/สั่งการเสียงภาษาไทยเป็นหลัก',
     category: 'preference',
     importance: 5,
+    confidence: 98,
+    verified: true,
+    status: 'active',
     created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
   },
@@ -66,6 +80,9 @@ const DEFAULT_MEMORIES: MemoryItem[] = [
     content: 'ชอบดื่มกาแฟดริปตอนเช้าเวลา 08:30 น. ก่อนเริ่มทำงานเขียนโค้ด',
     category: 'routine',
     importance: 4,
+    confidence: 90,
+    verified: true,
+    status: 'active',
     created_at: new Date(Date.now() - 86400000).toISOString(),
     updated_at: new Date(Date.now() - 86400000).toISOString(),
   },
@@ -74,6 +91,9 @@ const DEFAULT_MEMORIES: MemoryItem[] = [
     content: 'กำลังพัฒนาโปรเจกต์ Personal AI Desktop Assistant ด้วย Electron, React และ TypeScript',
     category: 'work',
     importance: 5,
+    confidence: 100,
+    verified: true,
+    status: 'active',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }
@@ -93,6 +113,13 @@ const DEFAULT_KNOWLEDGE: KnowledgeItem[] = [
     content: 'Bo AI เป็น Desktop Assistant ทำงานใน System Tray รันบน Windows 10/11 ใช้สถาปัตยกรรม Privacy-first จัดเก็บฐานข้อมูล SQLite ภายในเครื่อง',
     source: 'manual',
     created_at: new Date().toISOString(),
+  },
+  {
+    id: 'kn_music_control',
+    title: 'กฎการควบคุมเครื่องเล่นเพลงและระดับเสียง (Music & Volume Rules)',
+    content: 'การควบคุมเพลงของโบ้:\n1. "ปิด" / "ปิดเพลง" / "ปิดไปเลย" -> ปิดเพลงทันที นำแถบเพลงออก สแตนด์บายรอรับคำสั่งใหม่\n2. "พอส" / "pause" / "หยุด" -> พักเพลงชั่วคราว คงแถบเพลงไว้\n3. "เปิด" / "บอกเปิด" / "เล่นต่อ" / "เปิดต่อ" / "resume" -> สั่งเปิดเพลง เล่นเพลงต่อ หรือเริ่มเล่นจากคิวลิสต์ทันที\n4. "เพลงต่อไป" / "เพลงถัดไป" / "เปลี่ยนเพลง" -> สลับเล่นเพลงถัดไปในคิว Playlist\n5. "ลดเสียง" / "เบาเสียง" -> ปรับลดระดับเสียงลงทีละ 10%\n6. "ลดมาก" / "ลดเยอะๆ" -> ปรับระดับเสียงลงเหลือ 20% ของหลอดเสียงทันที (ไม่ได้ลดทีละ 20% แต่ตั้งค่าเป็น 20% พอดี)\n7. "ลดต่ำ" -> ปรับระดับเสียงลงเหลือ 10% ของหลอดเสียง\n8. "ปิดเสียง" (Mute) / "เปิดเสียง" (Unmute)\n9. "remote เปิด" / "เปิดในเครื่อง" / "เปิดบนคอม" -> โบ้ Remote สั่งระบบ Windows เปิดหน้าต่างเพลงบนเบราว์เซอร์หลักของเครื่องผู้ใช้โดยตรง',
+    source: 'manual',
+    created_at: new Date().toISOString(),
   }
 ];
 
@@ -101,13 +128,121 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
     id: 'ex_1',
     user_query: 'น้องโบ วันนี้อากาศที่กรุงเทพเป็นยังไงบ้าง?',
     expected_response: 'วันนี้ที่กรุงเทพฯ ท้องฟ้าแจ่มใส อุณหภูมิประมาณ 32°C มีเมฆบางส่วน ช่วงบ่ายอาจมีโอกาสฝนตกเล็กน้อย 20% อย่าลืมพกร่มติดตัวนะคะ!',
-    notes: 'ตอบกระชับ ให้ข้อมูลครบและเตือนอย่างอบอุ่น'
+    notes: 'ตอบกระชับ ให้ข้อมูลครบและเตือนอย่างอบอุ่น',
+    rating: 5,
+    category: 'weather',
   },
   {
     id: 'ex_2',
     user_query: 'ช่วยเปิดเพลงให้ฟังหน่อย',
-    expected_response: 'ได้เลยค่ะ กำลังเปิดเพลงแนว Lo-fi ผ่อนคลายสำหรับการทำงานให้นะคะ มีอะไรให้น้องโบช่วยเพิ่มบอกได้เสมอค่ะ',
-    notes: 'ตอบรับคำสั่งควบคุมมีเดียทันที'
+    expected_response: 'ได้เลยแก จัดเพลงเพราะๆ ให้ฟังชิลๆ แล้วนะ มีอะไรให้ช่วยเพิ่มบอกได้เสมอ 🎵🎧',
+    notes: 'ตอบรับคำสั่งเปิดเพลงทันที',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_open_short',
+    user_query: 'เปิด',
+    expected_response: 'เปิดเพลงต่อให้แล้วนะแก นั่งฟังชิลๆ ได้เลย 🎵▶️',
+    notes: 'บอกเปิดคือสั่งเปิดเพลงทันที',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_open_tell',
+    user_query: 'บอกเปิด',
+    expected_response: 'เปิดเพลงต่อให้แล้วนะแก นั่งฟังชิลๆ ได้เลย 🎵▶️',
+    notes: 'สั่งบอกเปิด คือเริ่มเล่นเพลงทันที',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_remote',
+    user_query: 'ให้โบ้ remote เปิดในเครื่องเราได้ไหม',
+    expected_response: 'ทำได้แน่นอนแก! โบ้ remote สั่งเปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วนะ 🚀🖥️🎵 ฟังเต็มระบบบนเครื่องแกได้เลย',
+    notes: 'Remote สั่งเปิดเบราว์เซอร์บนเครื่อง Windows ของผู้ใช้',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_remote_command',
+    user_query: 'remote เปิดในเครื่อง',
+    expected_response: 'ทำได้แน่นอนแก! โบ้ remote สั่งเปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วนะ 🚀🖥️🎵',
+    notes: 'สั่ง Remote เปิดเพลงบนเครื่อง',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_stop',
+    user_query: 'ปิดเพลง',
+    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วแก มีเรื่องอะไรให้โบ้ช่วยต่อบอกมาได้เลยนะ ⏹️',
+    notes: 'ปิดเพลง ปิดแถบเพลงทันที และรอรับคำสั่งใหม่',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_stop_short',
+    user_query: 'ปิด',
+    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วแก มีเรื่องอะไรให้โบ้ช่วยต่อบอกมาได้เลยนะ ⏹️',
+    notes: 'บอกปิดคือปิดเพลงทันที สแตนด์บายรอรับคำสั่งใหม่',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_pause',
+    user_query: 'พอส',
+    expected_response: 'พักเพลงไว้ชั่วคราวแล้วนะแก อยากฟังต่อเมื่อไหร่บอกโบ้ได้เลย ⏸️',
+    notes: 'พอส คือพอส หยุดชั่วคราว',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_resume',
+    user_query: 'เล่นต่อ',
+    expected_response: 'เปิดเพลงต่อให้แล้วนะแก นั่งฟังชิลๆ ได้เลย 🎵▶️',
+    notes: 'เล่นต่อ คือเล่นต่อ เล่นเพลงเดิมต่อ',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_next',
+    user_query: 'เพลงต่อไป',
+    expected_response: 'เปลี่ยนเป็นเพลงถัดไปในลิสต์ให้แล้วนะแก ⏭️🎵',
+    notes: 'เลือกเพลงต่อไปมาเล่นในลิสต์คิว',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_vol_down',
+    user_query: 'ลดเสียง',
+    expected_response: 'เบาเสียงเพลงลงทีละ 10% ให้แล้วนะแก 🔉',
+    notes: 'ลดเสียงลงทีละ 10%',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_vol_much',
+    user_query: 'ลดมาก',
+    expected_response: 'ปรับลดเสียงลงเหลือ 20% ของหลอดเสียงให้แล้วนะแก เบานุ่มกำลังสบาย 🔉',
+    notes: 'ลดมาก คือลดลงเหลือ 20% ของหลอดเสียงทันที ไม่ใช่ลดทีละ 20%',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_vol_low',
+    user_query: 'ลดต่ำ',
+    expected_response: 'ปรับลดเสียงต่ำลงเหลือ 10% ให้แล้วนะแก 🔈',
+    notes: 'ลดต่ำ คือลดลงเหลือ 10% ของหลอดเสียง',
+    rating: 5,
+    category: 'music',
+  },
+  {
+    id: 'ex_music_mute',
+    user_query: 'ปิดเสียง',
+    expected_response: 'ปิดเสียงเพลงให้แล้วนะแก (Muted) 🔇',
+    notes: 'ปิดเสียง (Mute)',
+    rating: 5,
+    category: 'music',
   }
 ];
 
@@ -144,9 +279,12 @@ export class DatabaseService {
         parsed.llm_provider = 'gemini';
         parsed.wake_word = 'โบ้';
         parsed.tts_engine = 'natural_female';
+        if (!parsed.tts_rate || parsed.tts_rate <= 1.05) {
+          parsed.tts_rate = 1.20;
+        }
         parsed.alternate_names = Array.from(new Set([
           ...(parsed.alternate_names || []),
-          'ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'Bo AI'
+          'ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'ไอ้โบว์', 'ไอโบว์', 'น้องโบว์', 'โบว์', 'Bo AI'
         ]));
         this.saveSettings(parsed);
       } catch (_) {}
@@ -160,9 +298,23 @@ export class DatabaseService {
     }
     if (!localStorage.getItem(STORAGE_KEYS.KNOWLEDGE)) {
       this.saveKnowledge(DEFAULT_KNOWLEDGE);
+    } else {
+      const currentKn = this.getKnowledge();
+      const currentIds = new Set(currentKn.map(k => k.id));
+      const missingKn = DEFAULT_KNOWLEDGE.filter(k => !currentIds.has(k.id));
+      if (missingKn.length > 0) {
+        this.saveKnowledge([...currentKn, ...missingKn]);
+      }
     }
     if (!localStorage.getItem(STORAGE_KEYS.EXAMPLES)) {
       this.saveExamples(DEFAULT_EXAMPLES);
+    } else {
+      const currentEx = this.getExamples();
+      const currentIds = new Set(currentEx.map(e => e.id));
+      const missingEx = DEFAULT_EXAMPLES.filter(e => !currentIds.has(e.id));
+      if (missingEx.length > 0) {
+        this.saveExamples([...currentEx, ...missingEx]);
+      }
     }
     if (!localStorage.getItem(STORAGE_KEYS.REMINDERS)) {
       this.saveReminders(DEFAULT_REMINDERS);
@@ -218,38 +370,165 @@ export class DatabaseService {
   }
 
   // Memories
-  public getMemories(): MemoryItem[] {
+  public getMemories(includeArchived = false): MemoryItem[] {
     const raw = localStorage.getItem(STORAGE_KEYS.MEMORIES);
-    return raw ? JSON.parse(raw) : [];
+    const list: MemoryItem[] = raw ? JSON.parse(raw) : [];
+    if (!includeArchived) {
+      return list.filter(m => m.status !== 'archived');
+    }
+    return list;
   }
 
   public saveMemories(memories: MemoryItem[]): void {
     localStorage.setItem(STORAGE_KEYS.MEMORIES, JSON.stringify(memories));
   }
 
-  public addMemory(content: string, category: MemoryItem['category'] = 'other', importance = 3): MemoryItem {
-    const memories = this.getMemories();
+  public addMemory(
+    content: string,
+    category: MemoryCategory = 'other',
+    importance = 3,
+    confidence = 85,
+    verified = false,
+    expires_at?: string
+  ): MemoryItem {
+    const memories = this.getMemories(true);
     const newMem: MemoryItem = {
       id: 'mem_' + Date.now(),
-      content,
+      content: content.trim(),
       category,
       importance,
+      confidence,
+      verified,
+      status: 'active',
+      expires_at,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     memories.unshift(newMem);
     this.saveMemories(memories);
+    this.logMemoryAudit('created', `เพิ่มความจำใหม่: "${content.slice(0, 40)}..."`, newMem.id);
     return newMem;
   }
 
   public deleteMemory(id: string): void {
-    const memories = this.getMemories().filter(m => m.id !== id);
-    this.saveMemories(memories);
+    const memories = this.getMemories(true);
+    const target = memories.find(m => m.id === id);
+    const filtered = memories.filter(m => m.id !== id);
+    this.saveMemories(filtered);
+    if (target) {
+      this.logMemoryAudit('deleted', `ลบความจำ: "${target.content.slice(0, 40)}..."`, id);
+    }
+  }
+
+  public purgeMemory(id: string): void {
+    this.deleteMemory(id);
   }
 
   public updateMemory(updated: MemoryItem): void {
-    const memories = this.getMemories().map(m => m.id === updated.id ? { ...updated, updated_at: new Date().toISOString() } : m);
+    const memories = this.getMemories(true).map(m =>
+      m.id === updated.id ? { ...updated, updated_at: new Date().toISOString() } : m
+    );
     this.saveMemories(memories);
+    this.logMemoryAudit('updated', `อัปเดตข้อมูลความจำ: "${updated.content.slice(0, 40)}..."`, updated.id);
+  }
+
+  public verifyMemory(id: string): void {
+    const memories = this.getMemories(true).map(m => {
+      if (m.id === id) {
+        return { ...m, verified: true, confidence: 100, updated_at: new Date().toISOString() };
+      }
+      return m;
+    });
+    this.saveMemories(memories);
+    this.logMemoryAudit('verified', `ยืนยันความถูกต้องของความจำ ID: ${id}`, id);
+  }
+
+  public archiveMemory(id: string): void {
+    const memories = this.getMemories(true).map(m => {
+      if (m.id === id) {
+        return { ...m, status: 'archived' as const, updated_at: new Date().toISOString() };
+      }
+      return m;
+    });
+    this.saveMemories(memories);
+    this.logMemoryAudit('archived', `ย้ายความจำ ID: ${id} ไปที่คลังเก่า (Archived)`, id);
+  }
+
+  public pruneExpiredMemories(): { prunedCount: number } {
+    const memories = this.getMemories(true);
+    const now = new Date().getTime();
+    let count = 0;
+    const updated = memories.map(m => {
+      if (m.expires_at && new Date(m.expires_at).getTime() < now && m.status !== 'archived') {
+        count++;
+        this.logMemoryAudit('pruned', `ล้างความจำที่หมดอายุอัตโนมัติ: "${m.content.slice(0, 30)}..."`, m.id);
+        return { ...m, status: 'archived' as const };
+      }
+      return m;
+    });
+    if (count > 0) {
+      this.saveMemories(updated);
+    }
+    return { prunedCount: count };
+  }
+
+  // Detect memory conflicts (e.g. coffee vs tea, awake time, dark vs light theme)
+  public detectMemoryConflict(newFact: string): { conflict: boolean; conflictingMemory?: MemoryItem; reason?: string } {
+    const activeMemories = this.getMemories(false);
+    const lower = newFact.toLowerCase();
+
+    // Heuristics for common Thai preference conflicts
+    const conflictPairs: Array<{ keywords: string[]; topic: string }> = [
+      { keywords: ['กาแฟ', 'ชา', 'มัทฉะ', 'โกโก้', 'ไม่ดื่มกาแฟ', 'เลิกดื่มกาแฟ'], topic: 'เครื่องดื่ม' },
+      { keywords: ['dark theme', 'light theme', 'ธีมมืด', 'ธีมสว่าง'], topic: 'ธีมหน้าจอ' },
+      { keywords: ['นอนดึก', 'นอนเร็ว', 'ตื่นเช้า', 'ตื่นสาย'], topic: 'เวลานอน/ตื่น' },
+      { keywords: ['อาหารเจ', 'กินเจ', 'มังสวิรัติ', 'กินเนื้อ', 'ไม่กินเนื้อ'], topic: 'การกิน' },
+      { keywords: ['ออกกำลังกาย', 'ไม่ออกกำลังกาย', 'วิ่ง', 'เข้ายิม'], topic: 'กิจกรรมสุขภาพ' },
+    ];
+
+    for (const pair of conflictPairs) {
+      const matchInNew = pair.keywords.some(k => lower.includes(k));
+      if (matchInNew) {
+        const found = activeMemories.find(m =>
+          pair.keywords.some(k => m.content.toLowerCase().includes(k)) &&
+          m.content.trim() !== newFact.trim()
+        );
+        if (found) {
+          return {
+            conflict: true,
+            conflictingMemory: found,
+            reason: `ตรวจพบข้อมูลเกี่ยวกับ "${pair.topic}" ซึ่งขัดแย้งกับความจำเดิม`,
+          };
+        }
+      }
+    }
+
+    return { conflict: false };
+  }
+
+  // Audit Logs
+  public getMemoryAuditLogs(): MemoryAuditLog[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
+    return raw ? JSON.parse(raw) : [];
+  }
+
+  public logMemoryAudit(action: MemoryAuditLog['action'], description: string, memoryId?: string): void {
+    const logs = this.getMemoryAuditLogs();
+    const newLog: MemoryAuditLog = {
+      id: 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      memory_id: memoryId,
+      action,
+      description,
+      timestamp: new Date().toISOString(),
+    };
+    logs.unshift(newLog);
+    // Keep max 200 logs
+    if (logs.length > 200) logs.pop();
+    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(logs));
+  }
+
+  public clearMemoryAuditLogs(): void {
+    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify([]));
   }
 
   // Knowledge Items
@@ -292,22 +571,61 @@ export class DatabaseService {
     localStorage.setItem(STORAGE_KEYS.EXAMPLES, JSON.stringify(items));
   }
 
-  public addExample(user_query: string, expected_response: string, notes?: string): ExampleTrainingItem {
+  public addExample(user_query: string, expected_response: string, notes?: string, category = 'general'): ExampleTrainingItem {
     const items = this.getExamples();
     const newItem: ExampleTrainingItem = {
       id: 'ex_' + Date.now(),
       user_query,
       expected_response,
       notes,
+      rating: 5,
+      category,
     };
     items.unshift(newItem);
     this.saveExamples(items);
     return newItem;
   }
 
+  public updateExampleRating(id: string, delta: number): void {
+    const items = this.getExamples().map(e => {
+      if (e.id === id) {
+        const current = e.rating ?? 5;
+        const next = Math.max(1, Math.min(10, current + delta));
+        return { ...e, rating: next };
+      }
+      return e;
+    });
+    this.saveExamples(items);
+  }
+
   public deleteExample(id: string): void {
     const items = this.getExamples().filter(e => e.id !== id);
     this.saveExamples(items);
+  }
+
+  // Export / Import Training Dataset (Roadmap 1)
+  public exportTrainingDataset(): string {
+    const dataset: TrainingDataset = {
+      version: '1.0.0',
+      exported_at: new Date().toISOString(),
+      personality: this.getPersonality(),
+      examples: this.getExamples(),
+      knowledge: this.getKnowledge(),
+    };
+    return JSON.stringify(dataset, null, 2);
+  }
+
+  public importTrainingDataset(jsonData: string): boolean {
+    try {
+      const data = JSON.parse(jsonData);
+      if (data.personality) this.savePersonality(data.personality);
+      if (Array.isArray(data.examples)) this.saveExamples(data.examples);
+      if (Array.isArray(data.knowledge)) this.saveKnowledge(data.knowledge);
+      return true;
+    } catch (e) {
+      console.error('Failed to import training dataset:', e);
+      return false;
+    }
   }
 
   // Reminders

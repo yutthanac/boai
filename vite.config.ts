@@ -40,6 +40,48 @@ const ttsPlugin: Plugin = {
         res.end(err.message);
       }
     });
+
+    server.middlewares.use('/api/music/search', (req, res) => {
+      try {
+        const urlObj = new URL(req.url || '', 'http://localhost');
+        const q = urlObj.searchParams.get('q') || '';
+        if (!q) {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ videoId: null }));
+          return;
+        }
+
+        const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+        const ytReq = https.get(ytUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'th-TH,th;q=0.9,en;q=0.8',
+          }
+        }, (ytRes) => {
+          let body = '';
+          ytRes.on('data', chunk => (body += chunk));
+          ytRes.on('end', () => {
+            const matches = [...body.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
+            const videoId = matches.length > 0 ? matches[0][1] : null;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ videoId }));
+          });
+        });
+
+        ytReq.on('error', () => {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ videoId: null }));
+        });
+        ytReq.setTimeout(5000, () => {
+          ytReq.destroy();
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ videoId: null }));
+        });
+      } catch (_) {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ videoId: null }));
+      }
+    });
   }
 };
 

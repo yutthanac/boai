@@ -15,23 +15,50 @@ export class AIService {
     return AIService.instance;
   }
 
-  // Generate enriched system prompt with personality + memories + knowledge
+  // Generate enriched system prompt with personality + tuning sliders + memories + knowledge + few-shot examples
   private buildSystemPrompt(): string {
     const personality = db.getPersonality();
-    const memories = db.getMemories();
+    const memories = db.getMemories(false);
     const knowledge = db.getKnowledge();
     const examples = db.getExamples();
+    const tuning = personality.tuning || { wittiness: 65, friendliness: 85, formality: 20, conciseness: 80 };
 
-    let prompt = `คุณคือ "โบ้" เพื่อนสนิทคู่หูของผู้ใช้
-แนวทางการตอบ:
-1. คุยเป็นกันเองเหมือนเพื่อนสนิทคุยกัน (แทนตัวเองว่า "เรา" หรือ "โบ้", เรียกผู้ใช้ว่า "เธอ" หรือ "แก") อารมณ์ดี จริงใจ สบายๆ เหมือนเพื่อนที่นั่งอยู่ข้างๆ
-2. ตอบกระชับ ตรงประเด็น ฉลาด มีประโยชน์ ช่วยคิด ช่วยแก้ปัญหาได้ทันที
-3. ห้ามพูดถึงคำว่า AI, LLM, Gemini, OpenAI, Claude, API หรือคำศัพท์เทคนิคระบบเด็ดขาด และไม่ต้องแนะนำตัวเป็นระบบ
-4. ไม่พูดทางการแบบคอลเซ็นเตอร์ ไม่ต้องลงท้าย คะ/ขา แข็งๆ ให้ใช้ภาษาพูดที่เป็นธรรมชาติ เช่น จ้า, นะ, ล่ะ, ได้เลย, ว่าไงแก
+    let prompt = `คุณคือ "${personality.name || 'โบ้'}" เพื่อนสนิทคู่หูประจำ Desktop ของผู้ใช้
+แนวทางการตอบและบุคลิกภาพ:
+1. คุยเป็นกันเองเหมือนเพื่อนสนิทคู่หู (แทนตัวเองว่า "เรา" หรือ "${personality.name || 'โบ้'}", เรียกผู้ใช้ว่า "เธอ" หรือ "แก") อารมณ์ดี จริงใจ สบายๆ เหมือนเพื่อนแท้ที่นั่งข้างๆ
+`;
+
+    // Dynamic Tone Calibration based on Sliders (Roadmap 1)
+    if (tuning.wittiness > 60) {
+      prompt += `- มุกตลกและความกวน: สอดแทรกความกวน มุกขำขัน และไหวพริบอย่างเป็นธรรมชาติ ไม่น่าเบื่อ\n`;
+    }
+    if (tuning.friendliness > 70) {
+      prompt += `- ความเป็นกันเอง: อบอุ่น จริงใจ สนิทสนม ใส่ใจผู้ใช้มากๆ คุยเหมือนเพื่อนรักที่รู้ใจ\n`;
+    }
+    if (tuning.formality < 30) {
+      prompt += `- ระดับความเป็นทางการ: ต่ำมาก (ห้ามพูดทางการแบบคอลเซ็นเตอร์ ไม่ต้องลงท้าย คะ/ขา แข็งๆ ใช้ภาษาพูดธรรมชาติ เช่น จ้า, นะ, ล่ะ, ได้เลย, ว่าไงแก)\n`;
+    } else if (tuning.formality > 70) {
+      prompt += `- ระดับความเป็นทางการ: สุภาพ เรียบร้อย ให้เกียรติผู้ใช้\n`;
+    }
+    if (tuning.conciseness > 70) {
+      prompt += `- ความกระชับ: ตอบสั้น กระชับ ตรงประเด็นทันที ไม่เกริ่นยืดยาว\n`;
+    }
+
+    prompt += `2. ห้ามพูดถึงคำว่า AI, LLM, Gemini, OpenAI, Claude, API หรือคำศัพท์เทคนิคระบบ และไม่ต้องแนะนำตัวเป็นระบบ
+3. กฎการควบคุมเครื่องเล่นเพลงและระดับเสียง:
+- เมื่อสั่ง "ปิด", "ปิดเพลง", "ปิดไปเลย" -> ปิดเพลงทันที นำแถบเพลงออก สแตนด์บายรอรับคำสั่งใหม่
+- เมื่อสั่ง "พอส", "pause", "หยุด" -> พักเพลงชั่วคราว
+- เมื่อสั่ง "เปิด", "บอกเปิด", "เล่นต่อ", "เปิดต่อ", "resume" -> เล่นเพลงเดิมต่อ หรือเริ่มเปิดเพลงจากคิวลิสต์ทันที
+- เมื่อสั่ง "remote เปิด", "เปิดในเครื่อง", "เปิดบนคอม" -> โบ้ Remote สั่งระบบ Windows เปิดเพลงบนเบราว์เซอร์ของเครื่องผู้ใช้ทันที
+- เมื่อสั่ง "เพลงต่อไป", "เพลงถัดไป", "เปลี่ยนเพลง" -> เล่นเพลงถัดไปในคิว Playlist
+- เมื่อสั่ง "ลดเสียง", "เบาเสียง" -> ปรับลดระดับเสียงลงทีละ 10%
+- เมื่อสั่ง "ลดมาก", "ลดเยอะๆ" -> ปรับลดระดับเสียงลงเหลือ 20% ของหลอดเสียงทันที (ไม่ได้ลดทีละ 20% แต่ตั้งค่าเป็น 20% พอดี)
+- เมื่อสั่ง "ลดต่ำ" -> ปรับลดระดับเสียงลงเหลือ 10%
+- เมื่อสั่ง "ปิดเสียง" -> ปิดเสียง (Mute)
 \n`;
 
     if (memories.length > 0) {
-      prompt += `--- เรื่องที่จำได้เกี่ยวกับเพื่อนคนนี้ ---\n`;
+      prompt += `--- เรื่องที่จำได้เกี่ยวกับเพื่อนคนนี้ (Long-term Memories) ---\n`;
       memories
         .sort((a, b) => b.importance - a.importance)
         .slice(0, 8)
@@ -42,13 +69,70 @@ export class AIService {
     }
 
     if (knowledge.length > 0) {
-      prompt += `--- ข้อมูลและความรู้เสริม ---\n`;
+      prompt += `--- ข้อมูลและความรู้เสริม (Knowledge Base) ---\n`;
       knowledge.slice(0, 5).forEach(k => {
         prompt += `${k.title}: ${k.content}\n\n`;
       });
     }
 
+    // Few-Shot Prompt Calibration (Roadmap 1: Top Rated Examples Injected)
+    if (examples.length > 0) {
+      prompt += `--- ตัวอย่างบทสนทนาและสไตล์การตอบที่ถูกต้อง (Few-Shot Training Examples) ---\n`;
+      const topExamples = [...examples]
+        .sort((a, b) => (b.rating ?? 5) - (a.rating ?? 5))
+        .slice(0, 4);
+
+      topExamples.forEach((ex, idx) => {
+        prompt += `[ตัวอย่างที่ ${idx + 1}]\nผู้ใช้: "${ex.user_query}"\nโบ้ต้องตอบ: "${ex.expected_response}"\n\n`;
+      });
+    }
+
     return prompt;
+  }
+
+  // Smart Fact Extraction & Conflict Detection (Roadmap 4 & 5)
+  public detectPendingMemoryAction(userText: string): import('../../types').MemoryPendingAction | null {
+    const text = userText.trim();
+    if (text.length < 5) return null;
+
+    // 1. Conflict detection with active memories
+    const conflictCheck = db.detectMemoryConflict(text);
+    if (conflictCheck.conflict && conflictCheck.conflictingMemory) {
+      return {
+        id: 'pending_' + Date.now(),
+        type: 'conflict',
+        fact: text,
+        category: conflictCheck.conflictingMemory.category,
+        confidence: 92,
+        existing_memory_id: conflictCheck.conflictingMemory.id,
+        existing_content: conflictCheck.conflictingMemory.content,
+      };
+    }
+
+    // 2. Personal fact extraction
+    const personalPatterns: Array<{ regex: RegExp; category: import('../../types').MemoryCategory }> = [
+      { regex: /(?:เราชอบ|ผมชอบ|หนูชอบ|ฉันชอบ)\s*([^\n,.!?]+)/i, category: 'preference' },
+      { regex: /(?:เราไม่ชอบ|ผมไม่ชอบ|หนูไม่ชอบ|เกลียด)\s*([^\n,.!?]+)/i, category: 'preference' },
+      { regex: /(?:เราดื่ม|ผมดื่ม|ชอบดื่ม|ชอบกิน|กินเป็นประจำ)\s*([^\n,.!?]+)/i, category: 'food' },
+      { regex: /(?:เราแพ้|ผมแพ้|เป็นโรค|แพ้อาหาร|แพ้ยา)\s*([^\n,.!?]+)/i, category: 'health' },
+      { regex: /(?:เราทำงาน|ผมทำงาน|โปรเจกต์|กำลังทำ|เขียนโค้ดด้วย)\s*([^\n,.!?]+)/i, category: 'work' },
+      { regex: /(?:เราตื่น|ผมตื่น|เข้านอน|ออกกำลังกายทุก)\s*([^\n,.!?]+)/i, category: 'routine' },
+      { regex: /(?:ช่วยจำว่า|จำไว้นะว่า|บันทึกไว้ว่า)\s*([^\n,.!?]+)/i, category: 'personal' },
+    ];
+
+    for (const item of personalPatterns) {
+      if (item.regex.test(text)) {
+        return {
+          id: 'pending_' + Date.now(),
+          type: 'new_fact',
+          fact: text,
+          category: item.category,
+          confidence: 88,
+        };
+      }
+    }
+
+    return null;
   }
 
   public async chat(messages: ChatMessage[]): Promise<string> {
@@ -278,10 +362,85 @@ export class AIService {
       }
     }
 
-    // Music / YouTube Music Integration
+    // 1. Music Control Commands (Stop, Pause, Resume, Next, Volume adjustments)
+    const musicControl = musicService.isMusicControlIntent(text);
+    if (musicControl) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('boai-music-control', { detail: { action: musicControl } })
+        );
+      }
+
+      if (musicControl === 'stop') {
+        return `ปิดเพลงให้เรียบร้อยแล้วแก มีเรื่องอะไรให้โบ้ช่วยต่อบอกมาได้เลยนะ ⏹️`;
+      }
+      if (musicControl === 'pause') {
+        return `พักเพลงไว้ชั่วคราวแล้วนะแก อยากฟังต่อเมื่อไหร่บอกโบ้ได้เลย ⏸️`;
+      }
+      if (musicControl === 'resume') {
+        return `เปิดเพลงต่อให้แล้วนะแก นั่งฟังชิลๆ ได้เลย 🎵▶️`;
+      }
+      if (musicControl === 'next') {
+        return `เปลี่ยนเป็นเพลงถัดไปในลิสต์ให้แล้วนะแก ⏭️🎵`;
+      }
+      if (musicControl === 'volume_substantial_decrease') {
+        return `ปรับลดเสียงลงเหลือ 20% ของหลอดเสียงให้แล้วนะแก เบานุ่มกำลังสบาย 🔉`;
+      }
+      if (musicControl === 'volume_low') {
+        return `ปรับลดเสียงต่ำลงเหลือ 10% ให้แล้วนะแก 🔈`;
+      }
+      if (musicControl === 'volume_decrease') {
+        return `เบาเสียงเพลงลงทีละ 10% ให้แล้วนะแก 🔉`;
+      }
+      if (musicControl === 'volume_increase') {
+        return `เร่งเสียงเพลงขึ้นทีละ 10% ให้แล้วนะแก 🔊`;
+      }
+      if (musicControl === 'mute') {
+        return `ปิดเสียงเพลงให้แล้วนะแก (Muted) 🔇`;
+      }
+      if (musicControl === 'unmute') {
+        return `เปิดเสียงเพลงกลับมาให้แล้วนะแก 🔊`;
+      }
+    }
+
+    // 2. Music / Audio Stream & YouTube Song Request
     if (musicService.isMusicIntent(text)) {
-      const songInfo = musicService.openMusic(text);
-      return `จัดไปแก! โบ้เปิดเพลง "${songInfo.query}" บน YouTube Music ให้แล้วนะ นั่งฟังชิลๆ ได้เลย 🎵🎧`;
+      const isRemoteRequest = /(?:remote|รีโมท|ในเครื่อง|บนเครื่อง|ในคอม|บนคอม|เบราว์เซอร์)/i.test(text);
+      const songInfo = await musicService.openMusic(text, isRemoteRequest);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('boai-music-state', {
+          detail: {
+            title: songInfo.query,
+            isPlaying: true,
+            url: songInfo.url,
+            videoId: songInfo.videoId,
+            embedUrl: songInfo.embedUrl,
+            audioStreamUrl: songInfo.audioStreamUrl,
+            playbackMode: songInfo.playbackMode,
+            source: songInfo.playbackMode === 'stream' ? 'direct_stream' : 'youtube_music',
+            updatedAt: new Date().toISOString()
+          }
+        }));
+
+        // Remote open in Windows default browser
+        if (isRemoteRequest && songInfo.url) {
+          try {
+            if ((window as any).electronAPI?.openExternal) {
+              (window as any).electronAPI.openExternal(songInfo.url);
+            } else {
+              window.open(songInfo.url, '_blank', 'noopener,noreferrer');
+            }
+          } catch (e) {
+            console.warn('[AIService] Failed to remote open in browser:', e);
+          }
+        }
+      }
+
+      if (isRemoteRequest) {
+        return `ทำได้แน่นอนแก! โบ้ remote สั่งเปิดเพลง "${songInfo.query}" บนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วนะ 🚀🖥️🎵 (เด้งแท็บ YouTube Music บนเครื่องให้ฟังเต็มระบบเลย)`;
+      }
+
+      return `จัดไปแก! โบ้เปิดเพลง "${songInfo.query}" ให้แล้วนะ กำลังเล่นเสียงเพลงให้ฟังเลย นั่งทำงานหรือพักผ่อนชิลๆ ได้เลย 🎵🎧 (ถ้าอยากให้เปิดบนคอมโดยตรง บอก "โบ้ remote เปิดในเครื่อง" ได้เลยนะ)`;
     }
 
     // Reminders

@@ -12,10 +12,16 @@ export function setupTray(mainWindow: BrowserWindow): Tray {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'เปิดหน้าต่างน้องโบ (Show Bo AI)',
+      label: 'เปิดหน้าต่างหลัก (Show Bo AI) — Alt+Space',
       click: () => {
         mainWindow.show();
         mainWindow.focus();
+      },
+    },
+    {
+      label: 'สลับโหมดลูกแก้วลอย (Floating Orb) — Ctrl+Shift+B',
+      click: () => {
+        mainWindow.webContents.send('toggle-mini-mode-trigger');
       },
     },
     { type: 'separator' },

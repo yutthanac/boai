@@ -419,16 +419,65 @@ export class AudioService {
 
   private currentAudioElement: HTMLAudioElement | null = null;
 
+  // Normalize Thai conversational text for natural, smooth TTS without robotic interruptions
+  public normalizeThaiTtsText(text: string): string {
+    return text
+      // Strip code blocks & markdown
+      .replace(/```[\s\S]*?```/g, 'ดูโค้ดบนจอได้เลยนะ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/[*_~#>-]/g, ' ')
+      // Convert weather & measurement units to natural spoken Thai
+      .replace(/(\d+(?:\.\d+)?)\s*°C/g, (_m, n) => `${n} องศา`)
+      .replace(/°C/g, ' องศา')
+      .replace(/(\d+(?:\.\d+)?)\s*km\/h/gi, (_m, n) => `${n} กิโลเมตรต่อชั่วโมง`)
+      .replace(/km\/h/gi, ' กิโลเมตรต่อชั่วโมง')
+      .replace(/(\d+(?:\.\d+)?)\s*%/g, (_m, n) => `${n} เปอร์เซ็นต์`)
+      // Clean parentheses so TTS doesn't say "วงเล็บเปิด...วงเล็บปิด"
+      .replace(/\(([^)]+)\)/g, ', $1, ')
+      .replace(/[()[\]{}"'“”‘’]/g, ' ')
+      // Strip emojis
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+      // Normalize multiple spaces
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // Split Thai text into natural conversational chunks without cutting words
+  public splitIntoNaturalThaiChunks(text: string, maxLen = 130): string[] {
+    const cleaned = this.normalizeThaiTtsText(text);
+    if (!cleaned) return [];
+
+    // Split on breath pauses and conversational boundaries
+    const rawSegments = cleaned.split(/(?<=[.!?\n]|นะแก|แล้วนะ|เลยนะ|จ้า|ครับ|ค่ะ|เลย|แต่|และ)\s+/);
+    const chunks: string[] = [];
+    let current = '';
+
+    for (const seg of rawSegments) {
+      const part = seg.trim();
+      if (!part) continue;
+
+      if ((current + ' ' + part).length > maxLen) {
+        if (current.trim()) chunks.push(current.trim());
+        current = part;
+      } else {
+        current = current ? `${current} ${part}` : part;
+      }
+    }
+    if (current.trim()) chunks.push(current.trim());
+    return chunks.length > 0 ? chunks : [cleaned.slice(0, maxLen)];
+  }
+
   // Text-to-Speech (TTS) - Supports Natural Thai Female Voice, OpenAI & Browser Fallback
-  public async speak(text: string, rate = 1.0, pitch = 1.0): Promise<void> {
+  public async speak(text: string, rate = 1.20, pitch = 1.0): Promise<void> {
     this.setSpeakingState(true);
     try {
       const settings = db.getSettings();
+      const effectiveRate = rate || settings.tts_rate || 1.20;
 
       // 1. Natural Thai Female Voice (Free, Studio Clarity - Recommended)
       if (settings.tts_engine === 'natural_female' || !settings.tts_engine) {
         try {
-          await this.speakWithNaturalFemale(text, rate || settings.tts_rate || 1.0);
+          await this.speakWithNaturalFemale(text, effectiveRate);
           return;
         } catch (err) {
           console.warn('Natural female TTS failed, falling back to browser:', err);
@@ -439,68 +488,43 @@ export class AudioService {
       if (settings.tts_engine === 'openai' && settings.openai_api_key) {
         try {
           await this.speakWithOpenAI(
-            text,
+            this.normalizeThaiTtsText(text),
             settings.openai_api_key,
             settings.openai_tts_voice || 'nova',
             settings.openai_tts_model || 'tts-1-hd',
-            settings.tts_rate
+            effectiveRate
           );
           return;
         } catch (err) {
           console.warn('OpenAI TTS failed, falling back to Natural Female Voice:', err);
           try {
-            await this.speakWithNaturalFemale(text, rate || settings.tts_rate || 1.0);
+            await this.speakWithNaturalFemale(text, effectiveRate);
             return;
           } catch (_) {}
         }
       }
 
       // 3. Browser SpeechSynthesis fallback
-      await this.speakWithBrowser(text, rate, pitch);
+      await this.speakWithBrowser(text, effectiveRate, pitch);
     } finally {
       this.setSpeakingState(false);
     }
   }
 
   // Natural Thai Female Voice (Studio Clarity, 100% Free)
-  public async speakWithNaturalFemale(text: string, speed = 1.0): Promise<void> {
+  public async speakWithNaturalFemale(text: string, speed = 1.20): Promise<void> {
     this.stopSpeaking();
 
-    // Clean text: strip code blocks, markdown symbols, and emojis for smooth TTS
-    const cleanText = text
-      .replace(/```[\s\S]*?```/g, 'ดูโค้ดบนจอได้เลยนะ')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/[*_~#>-]/g, '')
-      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
-      .trim();
+    const chunks = this.splitIntoNaturalThaiChunks(text);
+    if (chunks.length === 0) return;
 
-    if (!cleanText) return;
-
-    // Split into natural short chunks (up to 140 chars)
-    const chunks: string[] = [];
-    const rawSentences = cleanText.split(/([.!?\n]+|\s{2,})/);
-    let currentChunk = '';
-
-    for (const part of rawSentences) {
-      if (!part.trim()) continue;
-      if ((currentChunk + ' ' + part).length > 140) {
-        if (currentChunk.trim()) chunks.push(currentChunk.trim());
-        currentChunk = part.trim();
-      } else {
-        currentChunk = currentChunk ? `${currentChunk} ${part.trim()}` : part.trim();
-      }
-    }
-    if (currentChunk.trim()) chunks.push(currentChunk.trim());
-    if (chunks.length === 0) chunks.push(cleanText.slice(0, 140));
-
-    // Sequential audio playback
+    // Sequential audio playback with crisp, natural speech rate
     for (const chunk of chunks) {
       if (!chunk.trim()) continue;
       await new Promise<void>((resolve) => {
         const audio = new Audio(`/api/tts?text=${encodeURIComponent(chunk.trim())}`);
-        if (speed && speed !== 1.0) {
-          audio.playbackRate = Math.max(0.5, Math.min(2.0, speed));
-        }
+        const effectiveSpeed = Math.max(0.8, Math.min(2.0, speed || 1.20));
+        audio.playbackRate = effectiveSpeed;
         this.currentAudioElement = audio;
 
         audio.onended = () => {
@@ -518,6 +542,7 @@ export class AudioService {
       });
     }
   }
+
 
   // OpenAI TTS API (tts-1 / tts-1-hd) with realistic voices (nova, shimmer, alloy, etc.)
   public async speakWithOpenAI(
@@ -572,8 +597,8 @@ export class AudioService {
     });
   }
 
-  // Browser SpeechSynthesis
-  public speakWithBrowser(text: string, rate = 1.0, pitch = 1.0): Promise<void> {
+  // Browser SpeechSynthesis with Natural Thai voice prioritization
+  public speakWithBrowser(text: string, rate = 1.20, pitch = 1.0): Promise<void> {
     return new Promise((resolve) => {
       if (!('speechSynthesis' in window)) {
         console.warn('SpeechSynthesis not supported');
@@ -582,16 +607,22 @@ export class AudioService {
       }
 
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
+      const cleaned = this.normalizeThaiTtsText(text);
+      const utterance = new SpeechSynthesisUtterance(cleaned);
       utterance.lang = 'th-TH';
-      utterance.rate = rate;
-      utterance.pitch = pitch;
+      utterance.rate = Math.max(0.8, Math.min(2.0, rate || 1.20));
+      utterance.pitch = pitch || 1.0;
 
-      // Select Thai voice if available
+      // Select highest quality Natural / Online Thai voice if available
       const voices = window.speechSynthesis.getVoices();
-      const thaiVoice = voices.find(v => v.lang.includes('th') || v.name.toLowerCase().includes('thai'));
-      if (thaiVoice) {
-        utterance.voice = thaiVoice;
+      const thaiVoices = voices.filter(v => v.lang.includes('th') || v.name.toLowerCase().includes('thai'));
+      const naturalVoice =
+        thaiVoices.find(v => v.name.toLowerCase().includes('natural')) ||
+        thaiVoices.find(v => v.name.toLowerCase().includes('online')) ||
+        thaiVoices[0];
+
+      if (naturalVoice) {
+        utterance.voice = naturalVoice;
       }
 
       utterance.onend = () => {

@@ -8,11 +8,19 @@ export interface AudioDevice {
   kind: 'audioinput' | 'audiooutput';
 }
 
+export interface StyleTuning {
+  wittiness: number; // 0-100 (ความกวน/มุก)
+  friendliness: number; // 0-100 (ความเป็นกันเอง)
+  formality: number; // 0-100 (ความสุภาพ)
+  conciseness: number; // 0-100 (ความกระชับ)
+}
+
 export interface PersonalityConfig {
   name: string;
   system_prompt: string;
   speaking_style: string;
   formality_level: number; // 1 to 5
+  tuning?: StyleTuning;
 }
 
 export interface KnowledgeItem {
@@ -29,15 +37,71 @@ export interface ExampleTrainingItem {
   user_query: string;
   expected_response: string;
   notes?: string;
+  rating?: number; // Upvotes / score: e.g. 1 to 5 or net thumbs up
+  category?: string;
 }
+
+export interface TrainingDataset {
+  version: string;
+  exported_at: string;
+  personality: PersonalityConfig;
+  examples: ExampleTrainingItem[];
+  knowledge: KnowledgeItem[];
+}
+
+export type MemoryCategory = 'preference' | 'personal' | 'work' | 'routine' | 'health' | 'food' | 'other';
 
 export interface MemoryItem {
   id: string;
   content: string;
-  category: 'preference' | 'personal' | 'work' | 'routine' | 'other';
+  category: MemoryCategory;
   importance: number; // 1 to 5
+  confidence: number; // 0 to 100
+  verified: boolean;
   created_at: string;
   updated_at: string;
+  expires_at?: string; // Optional expiration ISO string
+  status?: 'active' | 'archived';
+}
+
+export interface MemoryAuditLog {
+  id: string;
+  memory_id?: string;
+  action: 'created' | 'updated' | 'verified' | 'conflicted' | 'pruned' | 'archived' | 'deleted';
+  description: string;
+  timestamp: string;
+}
+
+export interface MemoryPendingAction {
+  id: string;
+  type: 'new_fact' | 'conflict';
+  fact: string;
+  category: MemoryCategory;
+  confidence: number;
+  existing_memory_id?: string;
+  existing_content?: string;
+}
+
+export interface MusicTrackState {
+  title: string;
+  artist?: string;
+  isPlaying: boolean;
+  url?: string;
+  videoId?: string;
+  embedUrl?: string;
+  audioStreamUrl?: string;
+  playbackMode?: 'stream' | 'youtube';
+  source: 'youtube_music' | 'direct_stream';
+  updatedAt: string;
+}
+
+export interface PlaylistItem {
+  id: string;
+  title: string;
+  artist?: string;
+  videoId?: string;
+  audioStreamUrl?: string;
+  playbackMode: 'stream' | 'youtube';
 }
 
 export interface ChatMessage {
@@ -47,6 +111,7 @@ export interface ChatMessage {
   content: string;
   created_at: string;
   tokens?: number;
+  pending_memory?: MemoryPendingAction;
 }
 
 export interface Conversation {
@@ -79,6 +144,7 @@ export interface AppSettings {
   openai_tts_voice: 'nova' | 'shimmer' | 'alloy' | 'echo' | 'fable' | 'onyx';
   openai_tts_model: 'tts-1' | 'tts-1-hd';
   vad_timeout_ms: number;
+  mini_mode_hotkey?: string;
 }
 
 export interface ToolItem {
@@ -97,3 +163,4 @@ export interface ReminderItem {
   time: string;
   completed: boolean;
 }
+

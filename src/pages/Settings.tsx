@@ -48,7 +48,7 @@ export const Settings: React.FC = () => {
   const handleTestTts = async () => {
     setIsTestingTts(true);
     db.saveSettings(settings);
-    await audioService.speak('สวัสดีจ้า เราคือโบ้เพื่อนแกนะ มีเรื่องอะไรให้เราช่วยบอกมาได้เลย');
+    await audioService.speak('สวัสดีจ้า เราคือโบ้เพื่อนแกนะ มีเรื่องอะไรให้เราช่วยบอกมาได้เลย', settings.tts_rate, settings.tts_pitch);
     setIsTestingTts(false);
   };
 
@@ -442,20 +442,41 @@ export const Settings: React.FC = () => {
             </div>
 
             {/* TTS Speed */}
-            <div className="space-y-1 pt-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-300">ความเร็วเสียงพูด (Speed Rate)</span>
-                <span className="font-mono text-cyan-400">{settings.tts_rate}x</span>
+            <div className="space-y-2 pt-1">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-300 font-medium">ความเร็วเสียงพูด (Speech Speed)</span>
+                <span className="font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 font-semibold">{settings.tts_rate}x</span>
               </div>
               <input
                 type="range"
-                min="0.7"
-                max="1.5"
+                min="0.8"
+                max="1.8"
                 step="0.05"
                 value={settings.tts_rate}
                 onChange={(e) => setSettings({ ...settings, tts_rate: Number(e.target.value) })}
                 className="w-full accent-cyan-400 cursor-pointer"
               />
+              <div className="grid grid-cols-4 gap-1.5 pt-1">
+                {[
+                  { rate: 1.0, label: '1.0x ช้า' },
+                  { rate: 1.2, label: '1.2x ธรรมชาติ' },
+                  { rate: 1.35, label: '1.35x คล่อง' },
+                  { rate: 1.5, label: '1.5x ไว' },
+                ].map((preset) => (
+                  <button
+                    key={preset.rate}
+                    type="button"
+                    onClick={() => setSettings({ ...settings, tts_rate: preset.rate })}
+                    className={`py-1 rounded-lg text-[10px] border transition-all ${
+                      Math.abs(settings.tts_rate - preset.rate) < 0.03
+                        ? 'bg-cyan-500/20 border-cyan-400/60 text-cyan-300 font-medium shadow-sm'
+                        : 'bg-white/[0.02] border-white/[0.04] text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* VAD Timeout */}

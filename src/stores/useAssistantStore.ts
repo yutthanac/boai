@@ -3,6 +3,7 @@ import { AssistantState, ChatMessage, Conversation } from '../types';
 import { db } from '../services/db/databaseService';
 import { aiService } from '../services/ai/aiService';
 import { audioService } from '../services/audio/audioService';
+import { DEFAULT_MUSIC_PLAYLIST } from '../services/music/musicService';
 
 interface AssistantStore {
   state: AssistantState;
@@ -13,6 +14,13 @@ interface AssistantStore {
   isAlwaysListening: boolean;
   isMuted: boolean;
   statusText: string;
+  isMiniMode: boolean;
+  musicTrack: import('../types').MusicTrackState | null;
+  musicVolume: number;
+  isMusicMuted: boolean;
+  musicPlaylist: import('../types').PlaylistItem[];
+  currentPlaylistIndex: number;
+  pendingMemoryAction: import('../types').MemoryPendingAction | null;
 
   // Actions
   setState: (state: AssistantState) => void;
@@ -25,6 +33,18 @@ interface AssistantStore {
   startVoiceInteraction: () => Promise<void>;
   clearConversation: () => void;
   selectConversation: (id: string) => void;
+  setMiniMode: (enable: boolean) => Promise<void>;
+  toggleMiniMode: () => Promise<void>;
+  toggleMusicPlayPause: () => void;
+  stopMusic: () => void;
+  pauseMusic: () => void;
+  resumeMusic: () => void;
+  setMusicVolume: (volume: number) => void;
+  adjustMusicVolume: (delta: number) => number;
+  setMusicMuted: (muted: boolean) => void;
+  skipNextMusic: () => void;
+  playPlaylistItem: (index: number) => void;
+  resolvePendingMemory: (action: 'confirm' | 'dismiss' | 'edit', editedFact?: string) => void;
 }
 
 let isAudioListenersBound = false;
@@ -40,10 +60,177 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
   isAlwaysListening: true,
   isMuted: false,
   statusText: 'พร้อมรับฟังคำสั่ง (เรียก "น้องโบ")',
+  isMiniMode: false,
+  musicTrack: null,
+  musicVolume: (() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('boai_music_volume') : null;
+    return saved ? parseFloat(saved) : 0.8;
+  })(),
+  isMusicMuted: false,
+  musicPlaylist: DEFAULT_MUSIC_PLAYLIST,
+  currentPlaylistIndex: 0,
+  pendingMemoryAction: null,
 
   setState: (state) => set({ state }),
   setActiveTab: (activeTab) => set({ activeTab }),
   setStatusText: (statusText) => set({ statusText }),
+
+  setMiniMode: async (enable: boolean) => {
+    set({ isMiniMode: enable });
+    if (window.electronAPI?.setMiniMode) {
+      await window.electronAPI.setMiniMode(enable);
+    }
+  },
+
+  toggleMiniMode: async () => {
+    const next = !get().isMiniMode;
+    await get().setMiniMode(next);
+  },
+
+  toggleMusicPlayPause: () => {
+    const track = get().musicTrack;
+    if (!track) return;
+    const nextState = !track.isPlaying;
+    set({
+      musicTrack: { ...track, isPlaying: nextState, updatedAt: new Date().toISOString() },
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('boai-music-action', { detail: { action: nextState ? 'play' : 'pause' } })
+      );
+    }
+    if (window.electronAPI?.sendMediaCommand) {
+      window.electronAPI.sendMediaCommand(nextState ? 'play' : 'pause');
+    }
+  },
+
+  stopMusic: () => {
+    set({ musicTrack: null });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('boai-music-action', { detail: { action: 'stop' } }));
+    }
+    if (window.electronAPI?.sendMediaCommand) {
+      window.electronAPI.sendMediaCommand('stop');
+    }
+  },
+
+  pauseMusic: () => {
+    const track = get().musicTrack;
+    if (!track) return;
+    set({
+      musicTrack: { ...track, isPlaying: false, updatedAt: new Date().toISOString() },
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('boai-music-action', { detail: { action: 'pause' } }));
+    }
+    if (window.electronAPI?.sendMediaCommand) {
+      window.electronAPI.sendMediaCommand('pause');
+    }
+  },
+
+  resumeMusic: () => {
+    const track = get().musicTrack;
+    if (!track) {
+      // If no track was loaded (e.g. stopped previously), start playing playlist item
+      get().playPlaylistItem(get().currentPlaylistIndex || 0);
+      return;
+    }
+    set({
+      musicTrack: { ...track, isPlaying: true, updatedAt: new Date().toISOString() },
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('boai-music-action', { detail: { action: 'play' } }));
+    }
+    if (window.electronAPI?.sendMediaCommand) {
+      window.electronAPI.sendMediaCommand('play');
+    }
+  },
+
+  setMusicVolume: (volume: number) => {
+    const bounded = Math.max(0, Math.min(1, volume));
+    set({ musicVolume: bounded });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('boai_music_volume', bounded.toString());
+      window.dispatchEvent(
+        new CustomEvent('boai-music-volume', { detail: { volume: bounded, isMuted: false } })
+      );
+    }
+  },
+
+  adjustMusicVolume: (delta: number): number => {
+    const current = get().musicVolume;
+    const next = Math.max(0, Math.min(1, Math.round((current + delta) * 100) / 100));
+    get().setMusicVolume(next);
+    return Math.round(next * 100);
+  },
+
+  setMusicMuted: (muted: boolean) => {
+    set({ isMusicMuted: muted });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('boai-music-volume', { detail: { isMuted: muted } })
+      );
+    }
+  },
+
+  playPlaylistItem: (index: number) => {
+    const playlist = get().musicPlaylist;
+    if (index < 0 || index >= playlist.length) return;
+    const item = playlist[index];
+    set({
+      currentPlaylistIndex: index,
+      musicTrack: {
+        title: item.title,
+        artist: item.artist,
+        isPlaying: true,
+        videoId: item.videoId,
+        embedUrl: item.videoId
+          ? `https://www.youtube-nocookie.com/embed/${item.videoId}?autoplay=1&enablejsapi=1`
+          : undefined,
+        audioStreamUrl: item.audioStreamUrl,
+        playbackMode: item.playbackMode,
+        url: item.videoId
+          ? `https://www.youtube.com/watch?v=${item.videoId}`
+          : `https://music.youtube.com/search?q=${encodeURIComponent(item.title)}`,
+        source: item.playbackMode === 'stream' ? 'direct_stream' : 'youtube_music',
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  },
+
+  skipNextMusic: () => {
+    const playlist = get().musicPlaylist;
+    const currentIndex = get().currentPlaylistIndex;
+    const nextIndex = (currentIndex + 1) % playlist.length;
+    get().playPlaylistItem(nextIndex);
+    if (window.electronAPI?.sendMediaCommand) {
+      window.electronAPI.sendMediaCommand('next');
+    }
+  },
+
+  resolvePendingMemory: (action, editedFact) => {
+    const pending = get().pendingMemoryAction;
+    if (!pending) return;
+
+    if (action === 'confirm' || action === 'edit') {
+      const factToSave = editedFact || pending.fact;
+      if (pending.type === 'conflict' && pending.existing_memory_id) {
+        db.deleteMemory(pending.existing_memory_id);
+        db.addMemory(factToSave, pending.category, 4, 95, true);
+        db.logMemoryAudit(
+          'conflicted',
+          `แก้ไขข้อมูลขัดแย้ง: แทนที่ "${pending.existing_content?.slice(0, 30)}..." ด้วย "${factToSave.slice(0, 30)}..."`,
+          pending.existing_memory_id
+        );
+      } else {
+        db.addMemory(factToSave, pending.category, 3, 90, true);
+      }
+    } else {
+      db.logMemoryAudit('deleted', `ผู้ใช้ยกเลิกการบันทึกข้อเท็จจริง: "${pending.fact.slice(0, 30)}..."`);
+    }
+
+    set({ pendingMemoryAction: null });
+  },
 
   toggleAlwaysListening: () => {
     const next = !get().isAlwaysListening;
@@ -92,7 +279,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
     // Configure Wake Word
     audioService.setWakeWords(settings.wake_word, settings.alternate_names, settings.sensitivity);
 
-    // Register Audio Listeners once
+    // Register Audio & Electron Listeners once
     if (!isAudioListenersBound) {
       isAudioListenersBound = true;
 
@@ -127,6 +314,51 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
           });
         }
       });
+
+      // Electron listeners
+      if (window.electronAPI) {
+        window.electronAPI.onMiniModeChanged((isMini) => {
+          set({ isMiniMode: isMini });
+        });
+
+        window.electronAPI.onToggleMiniModeTrigger(() => {
+          get().toggleMiniMode();
+        });
+
+        window.electronAPI.onToggleMuteFromTray(() => {
+          get().toggleMute();
+        });
+
+        window.electronAPI.onMediaCommandReceived((command) => {
+          if (command === 'play' || command === 'pause') {
+            get().toggleMusicPlayPause();
+          } else if (command === 'next') {
+            get().skipNextMusic();
+          }
+        });
+      }
+
+      // Web custom event for music state
+      window.addEventListener('boai-music-state', ((event: CustomEvent) => {
+        if (event.detail) {
+          set({ musicTrack: event.detail });
+        }
+      }) as EventListener);
+
+      // Web custom event for music control commands
+      window.addEventListener('boai-music-control', ((event: CustomEvent) => {
+        const action = event.detail?.action;
+        if (action === 'stop') get().stopMusic();
+        else if (action === 'pause') get().pauseMusic();
+        else if (action === 'resume') get().resumeMusic();
+        else if (action === 'next') get().skipNextMusic();
+        else if (action === 'volume_substantial_decrease') get().setMusicVolume(0.20);
+        else if (action === 'volume_low') get().setMusicVolume(0.10);
+        else if (action === 'volume_decrease') get().adjustMusicVolume(-0.10);
+        else if (action === 'volume_increase') get().adjustMusicVolume(0.10);
+        else if (action === 'mute') get().setMusicMuted(true);
+        else if (action === 'unmute') get().setMusicMuted(false);
+      }) as EventListener);
     }
 
     if (settings.always_listening) {
@@ -142,7 +374,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
   clearConversation: () => {
     const { activeConversationId } = get();
     db.clearMessages(activeConversationId);
-    set({ messages: [] });
+    set({ messages: [], pendingMemoryAction: null });
   },
 
   sendMessage: async (text: string) => {
@@ -160,8 +392,18 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
 
     const { activeConversationId } = get();
 
-    // 1. Add User Message
+    // 1. Fact / Conflict Detection (Roadmap 4 & 5)
+    const pendingMemory = aiService.detectPendingMemoryAction(cleanText);
+    if (pendingMemory) {
+      set({ pendingMemoryAction: pendingMemory });
+    }
+
+    // 2. Add User Message
     const userMsg = db.addMessage(activeConversationId, 'user', cleanText);
+    if (pendingMemory) {
+      userMsg.pending_memory = pendingMemory;
+    }
+
     const currentMsgs = [...get().messages, userMsg];
     set({
       messages: currentMsgs,
@@ -169,7 +411,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
       statusText: 'กำลังคิดแป๊บนึงนะ...',
     });
 
-    // 2. Fetch AI Response
+    // 3. Fetch AI Response
     try {
       const replyText = await aiService.chat(currentMsgs);
       const assistantMsg = db.addMessage(activeConversationId, 'assistant', replyText);
@@ -180,7 +422,12 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
         statusText: 'กำลังตอบกลับ...',
       });
 
-      // 3. Text to Speech
+      // If in mini mode, show Windows notification
+      if (get().isMiniMode && window.electronAPI?.showNotification) {
+        window.electronAPI.showNotification('น้องโบ (Bo AI)', replyText.slice(0, 100));
+      }
+
+      // 4. Text to Speech
       const settings = db.getSettings();
       await audioService.speak(replyText, settings.tts_rate, settings.tts_pitch);
     } catch (e: any) {

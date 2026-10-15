@@ -6,10 +6,11 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && npm run build:electron",
+    "build:electron": "tsc electron/main.ts electron/ipc-handlers.ts electron/preload.ts electron/tray.ts --outDir dist-electron --module commonjs --target es2020 --esModuleInterop --skipLibCheck",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
-    "electron:build": "vite build && electron-builder"
+    "electron:build": "npm run build && electron-builder"
   },
   "keywords": [
     "ai",

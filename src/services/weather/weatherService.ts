@@ -10,6 +10,12 @@ export interface LiveWeatherData {
   advice: string;
   windSpeed: number;
   time: string;
+  // Forecast fields
+  isForecast?: boolean;
+  targetDayLabel?: string;
+  tempMax?: number;
+  tempMin?: number;
+  rainProbability?: number;
 }
 
 interface CacheEntry {
@@ -67,6 +73,129 @@ export function interpretWmoCode(code: number): { condition: string; emoji: stri
   }
 }
 
+// 77 Thai provinces & major cities dictionary
+const THAI_PROVINCES: Array<{ key: string; name: string }> = [
+  { key: 'กรุงเทพ', name: 'กรุงเทพมหานคร' },
+  { key: 'กทม', name: 'กรุงเทพมหานคร' },
+  { key: 'bangkok', name: 'Bangkok' },
+  { key: 'เชียงใหม่', name: 'เชียงใหม่' },
+  { key: 'chiang mai', name: 'Chiang Mai' },
+  { key: 'chiangmai', name: 'Chiang Mai' },
+  { key: 'เชียงราย', name: 'เชียงราย' },
+  { key: 'ภูเก็ต', name: 'ภูเก็ต' },
+  { key: 'phuket', name: 'Phuket' },
+  { key: 'ชลบุรี', name: 'ชลบุรี' },
+  { key: 'พัทยา', name: 'พัทยา' },
+  { key: 'pattaya', name: 'Pattaya' },
+  { key: 'ขอนแก่น', name: 'ขอนแก่น' },
+  { key: 'โคราช', name: 'นครราชสีมา' },
+  { key: 'นครราชสีมา', name: 'นครราชสีมา' },
+  { key: 'สงขลา', name: 'สงขลา' },
+  { key: 'หาดใหญ่', name: 'หาดใหญ่' },
+  { key: 'กระบี่', name: 'กระบี่' },
+  { key: 'krabi', name: 'Krabi' },
+  { key: 'หัวหิน', name: 'หัวหิน' },
+  { key: 'อยุธยา', name: 'พระนครศรีอยุธยา' },
+  { key: 'นนทบุรี', name: 'นนทบุรี' },
+  { key: 'ปทุมธานี', name: 'ปทุมธานี' },
+  { key: 'สมุทรปราการ', name: 'สมุทรปราการ' },
+  { key: 'สมุทรสาคร', name: 'สมุทรสาคร' },
+  { key: 'สมุทรสงคราม', name: 'สมุทรสงคราม' },
+  { key: 'นครปฐม', name: 'นครปฐม' },
+  { key: 'ระยอง', name: 'ระยอง' },
+  { key: 'จันทบุรี', name: 'จันทบุรี' },
+  { key: 'ตราด', name: 'ตราด' },
+  { key: 'กาญจนบุรี', name: 'กาญจนบุรี' },
+  { key: 'ราชบุรี', name: 'ราชบุรี' },
+  { key: 'สุพรรณบุรี', name: 'สุพรรณบุรี' },
+  { key: 'เพชรบุรี', name: 'เพชรบุรี' },
+  { key: 'ประจวบคีรีขันธ์', name: 'ประจวบคีรีขันธ์' },
+  { key: 'สุราษฎร์ธานี', name: 'สุราษฎร์ธานี' },
+  { key: 'สมุย', name: 'เกาะสมุย' },
+  { key: 'เกาะสมุย', name: 'เกาะสมุย' },
+  { key: 'นครศรีธรรมราช', name: 'นครศรีธรรมราช' },
+  { key: 'ชุมพร', name: 'ชุมพร' },
+  { key: 'ระนอง', name: 'ระนอง' },
+  { key: 'พังงา', name: 'พังงา' },
+  { key: 'ตรัง', name: 'ตรัง' },
+  { key: 'พัทลุง', name: 'พัทลุง' },
+  { key: 'สตูล', name: 'สตูล' },
+  { key: 'ปัตตานี', name: 'ปัตตานี' },
+  { key: 'ยะลา', name: 'ยะลา' },
+  { key: 'นราธิวาส', name: 'นราธิวาส' },
+  { key: 'อุบลราชธานี', name: 'อุบลราชธานี' },
+  { key: 'อุบล', name: 'อุบลราชธานี' },
+  { key: 'อุดรธานี', name: 'อุดรธานี' },
+  { key: 'อุดร', name: 'อุดรธานี' },
+  { key: 'ลำปาง', name: 'ลำปาง' },
+  { key: 'ลำพูน', name: 'ลำพูน' },
+  { key: 'แพร่', name: 'แพร่' },
+  { key: 'น่าน', name: 'น่าน' },
+  { key: 'พะเยา', name: 'พะเยา' },
+  { key: 'แม่ฮ่องสอน', name: 'แม่ฮ่องสอน' },
+  { key: 'พิษณุโลก', name: 'พิษณุโลก' },
+  { key: 'สุโขทัย', name: 'สุโขทัย' },
+  { key: 'ตาก', name: 'ตาก' },
+  { key: 'กำแพงเพชร', name: 'กำแพงเพชร' },
+  { key: 'พิจิตร', name: 'พิจิตร' },
+  { key: 'เพชรบูรณ์', name: 'เพชรบูรณ์' },
+  { key: 'นครสวรรค์', name: 'นครสวรรค์' },
+  { key: 'อุทัยธานี', name: 'อุทัยธานี' },
+  { key: 'สระบุรี', name: 'สระบุรี' },
+  { key: 'ลพบุรี', name: 'ลพบุรี' },
+  { key: 'สิงห์บุรี', name: 'สิงห์บุรี' },
+  { key: 'ชัยนาท', name: 'ชัยนาท' },
+  { key: 'อ่างทอง', name: 'อ่างทอง' },
+  { key: 'นครนายก', name: 'นครนายก' },
+  { key: 'ปราจีนบุรี', name: 'ปราจีนบุรี' },
+  { key: 'สระแก้ว', name: 'สระแก้ว' },
+  { key: 'ฉะเชิงเทรา', name: 'ฉะเชิงเทรา' },
+  { key: 'บุรีรัมย์', name: 'บุรีรัมย์' },
+  { key: 'สุรินทร์', name: 'สุรินทร์' },
+  { key: 'ศรีสะเกษ', name: 'ศรีสะเกษ' },
+  { key: 'ร้อยเอ็ด', name: 'ร้อยเอ็ด' },
+  { key: 'มหาสารคาม', name: 'มหาสารคาม' },
+  { key: 'กาฬสินธุ์', name: 'กาฬสินธุ์' },
+  { key: 'ชัยภูมิ', name: 'ชัยภูมิ' },
+  { key: 'เลย', name: 'เลย' },
+  { key: 'หนองคาย', name: 'หนองคาย' },
+  { key: 'บึงกาฬ', name: 'บึงกาฬ' },
+  { key: 'หนองบัวลำภู', name: 'หนองบัวลำภู' },
+  { key: 'สกลนคร', name: 'สกลนคร' },
+  { key: 'นครพนม', name: 'นครพนม' },
+  { key: 'มุกดาหาร', name: 'มุกดาหาร' },
+  { key: 'ยโสธร', name: 'ยโสธร' },
+  { key: 'อำนาจเจริญ', name: 'อำนาจเจริญ' },
+  // International cities
+  { key: 'โตเกียว', name: 'Tokyo' },
+  { key: 'tokyo', name: 'Tokyo' },
+  { key: 'โอซาก้า', name: 'Osaka' },
+  { key: 'osaka', name: 'Osaka' },
+  { key: 'โซล', name: 'Seoul' },
+  { key: 'seoul', name: 'Seoul' },
+  { key: 'สิงคโปร์', name: 'Singapore' },
+  { key: 'singapore', name: 'Singapore' },
+  { key: 'ลอนดอน', name: 'London' },
+  { key: 'london', name: 'London' },
+  { key: 'ปารีส', name: 'Paris' },
+  { key: 'paris', name: 'Paris' },
+  { key: 'นิวยอร์ก', name: 'New York' },
+  { key: 'new york', name: 'New York' },
+  { key: 'ไทเป', name: 'Taipei' },
+  { key: 'taipei', name: 'Taipei' },
+  { key: 'ฮ่องกง', name: 'Hong Kong' },
+  { key: 'hong kong', name: 'Hong Kong' },
+];
+
+// Stop words that must NEVER be extracted as cities
+const WEATHER_STOP_WORDS = new Set([
+  'ให้', 'ให้หน่อย', 'หน่อย', 'ดู', 'ช่วย', 'บอก', 'เป็นยังไง', 'เป็นไง', 'เป็นอย่างไร',
+  'ไหม', 'มั้ย', 'พรุ่งนี้', 'มะรืนนี้', 'วันนี้', 'ตอนนี้', 'ด้วย', 'สิ', 'นะ', 'ครับ',
+  'ค่ะ', 'จ้า', 'ที', 'หน่อยสิ', 'อยากรู้', 'บ้าง', 'วันพรุ่งนี้', 'วันมะรืน', 'พรุ่ง',
+  'มะรืน', 'สภาพอากาศ', 'อากาศ', 'อุณหภูมิ', 'ฝนตกไหม', 'ฝนตกมั้ย', 'แดด', 'หนาว',
+  'ร้อน', 'แก', 'ไอ้โบ้', 'โบ้', 'น้องโบ', 'ช่วยดู', 'หน่อยนะ', 'ด้วยนะ', 'รึเปล่า', 'หรือเปล่า'
+]);
+
 export class WeatherService {
   private static instance: WeatherService;
   private cache = new Map<string, CacheEntry>();
@@ -96,7 +225,7 @@ export class WeatherService {
   // Geocoding: Search city coordinates via Open-Meteo
   public async searchCityCoordinates(cityName: string): Promise<{ name: string; country: string; lat: number; lon: number } | null> {
     const cleanName = cityName.trim();
-    if (!cleanName) return null;
+    if (!cleanName || cleanName.length < 2 || WEATHER_STOP_WORDS.has(cleanName)) return null;
 
     try {
       const url = `${this.geoUrl}/search?name=${encodeURIComponent(cleanName)}&count=1&language=th&format=json`;
@@ -118,13 +247,25 @@ export class WeatherService {
     return null;
   }
 
-  // Fetch real-time weather data
-  public async getLiveWeather(lat?: number, lon?: number, cityName?: string): Promise<LiveWeatherData | null> {
+  // Detect time horizon from query
+  public detectDayOffset(text: string): { dayOffset: number; label: string } {
+    const raw = text.toLowerCase();
+    if (raw.includes('มะรืน') || raw.includes('วันมะรืน')) {
+      return { dayOffset: 2, label: 'มะรืนนี้' };
+    }
+    if (raw.includes('พรุ่งนี้') || raw.includes('วันพรุ่งนี้') || raw.includes('tomorrow')) {
+      return { dayOffset: 1, label: 'พรุ่งนี้' };
+    }
+    return { dayOffset: 0, label: 'ตอนนี้' };
+  }
+
+  // Fetch real-time weather or daily forecast data from Open-Meteo
+  public async getWeather(lat?: number, lon?: number, cityName?: string, dayOffset = 0): Promise<LiveWeatherData | null> {
     const targetLat = lat ?? this.defaultLat;
     const targetLon = lon ?? this.defaultLon;
     const targetCity = cityName || this.defaultCity;
 
-    const cacheKey = `${targetLat.toFixed(2)}_${targetLon.toFixed(2)}`;
+    const cacheKey = `${targetLat.toFixed(2)}_${targetLon.toFixed(2)}_day${dayOffset}`;
     const now = Date.now();
     const cached = this.cache.get(cacheKey);
     if (cached && (now - cached.timestamp < this.CACHE_TTL_MS)) {
@@ -132,7 +273,7 @@ export class WeatherService {
     }
 
     try {
-      const url = `${this.baseUrl}/forecast?latitude=${targetLat}&longitude=${targetLon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=auto`;
+      const url = `${this.baseUrl}/forecast?latitude=${targetLat}&longitude=${targetLon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,wind_speed_10m_max&timezone=auto`;
       const res = await fetch(url);
       if (!res.ok) {
         throw new Error(`Open-Meteo HTTP ${res.status}`);
@@ -140,8 +281,42 @@ export class WeatherService {
 
       const data = await res.json();
       const current = data.current;
-      if (!current) return null;
+      const daily = data.daily;
 
+      // Forecast for Tomorrow (dayOffset = 1) or Day After Tomorrow (dayOffset = 2)
+      if (dayOffset > 0 && daily && daily.time && daily.time.length > dayOffset) {
+        const weatherCode = daily.weather_code?.[dayOffset] ?? 0;
+        const { condition, emoji, advice } = interpretWmoCode(weatherCode);
+        const tempMax = Math.round((daily.temperature_2m_max?.[dayOffset] ?? 32) * 10) / 10;
+        const tempMin = Math.round((daily.temperature_2m_min?.[dayOffset] ?? 24) * 10) / 10;
+        const rainProb = daily.precipitation_probability_max?.[dayOffset] ?? 0;
+        const windMax = Math.round((daily.wind_speed_10m_max?.[dayOffset] ?? 10) * 10) / 10;
+        const targetDayLabel = dayOffset === 1 ? 'พรุ่งนี้' : 'มะรืนนี้';
+
+        const result: LiveWeatherData = {
+          city: targetCity,
+          temperature: tempMax,
+          apparentTemperature: tempMax,
+          humidity: rainProb,
+          weatherCode,
+          conditionText: condition,
+          emoji,
+          advice,
+          windSpeed: windMax,
+          time: daily.time[dayOffset] || '',
+          isForecast: true,
+          targetDayLabel,
+          tempMax,
+          tempMin,
+          rainProbability: rainProb,
+        };
+
+        this.cache.set(cacheKey, { data: result, timestamp: now });
+        return result;
+      }
+
+      // Current Weather
+      if (!current) return null;
       const weatherCode = current.weather_code ?? 0;
       const { condition, emoji, advice } = interpretWmoCode(weatherCode);
 
@@ -156,6 +331,8 @@ export class WeatherService {
         advice,
         windSpeed: Math.round(current.wind_speed_10m * 10) / 10,
         time: current.time || '',
+        isForecast: false,
+        targetDayLabel: 'ตอนนี้',
       };
 
       this.cache.set(cacheKey, { data: result, timestamp: now });
@@ -170,87 +347,34 @@ export class WeatherService {
   public extractCityFromPrompt(text: string): string | null {
     const raw = text.toLowerCase();
 
-    // Common Thai and International places
-    const popularPlaces = [
-      { key: 'เชียงใหม่', search: 'เชียงใหม่' },
-      { key: 'chiang mai', search: 'Chiang Mai' },
-      { key: 'chiangmai', search: 'Chiang Mai' },
-      { key: 'เชียงราย', search: 'เชียงราย' },
-      { key: 'chiang rai', search: 'Chiang Rai' },
-      { key: 'ภูเก็ต', search: 'ภูเก็ต' },
-      { key: 'phuket', search: 'Phuket' },
-      { key: 'ชลบุรี', search: 'ชลบุรี' },
-      { key: 'chonburi', search: 'Chonburi' },
-      { key: 'พัทยา', search: 'พัทยา' },
-      { key: 'pattaya', search: 'Pattaya' },
-      { key: 'ขอนแก่น', search: 'ขอนแก่น' },
-      { key: 'khon kaen', search: 'Khon Kaen' },
-      { key: 'khonkaen', search: 'Khon Kaen' },
-      { key: 'โคราช', search: 'นครราชสีมา' },
-      { key: 'นครราชสีมา', search: 'นครราชสีมา' },
-      { key: 'korat', search: 'Nakhon Ratchasima' },
-      { key: 'หาดใหญ่', search: 'หาดใหญ่' },
-      { key: 'hat yai', search: 'Hat Yai' },
-      { key: 'สงขลา', search: 'สงขลา' },
-      { key: 'กระบี่', search: 'กระบี่' },
-      { key: 'krabi', search: 'Krabi' },
-      { key: 'หัวหิน', search: 'หัวหิน' },
-      { key: 'hua hin', search: 'Hua Hin' },
-      { key: 'อยุธยา', search: 'อยุธยา' },
-      { key: 'นนทบุรี', search: 'นนทบุรี' },
-      { key: 'ปทุมธานี', search: 'ปทุมธานี' },
-      { key: 'สมุทรปราการ', search: 'สมุทรปราการ' },
-      { key: 'ระยอง', search: 'ระยอง' },
-      { key: 'rayong', search: 'Rayong' },
-      { key: 'กาญจนบุรี', search: 'กาญจนบุรี' },
-      { key: 'สุราษฎร์ธานี', search: 'สุราษฎร์ธานี' },
-      { key: 'สมุย', search: 'เกาะสมุย' },
-      { key: 'samui', search: 'Ko Samui' },
-      { key: 'อุบล', search: 'อุบลราชธานี' },
-      { key: 'อุดร', search: 'อุดรธานี' },
-      { key: 'ลำปาง', search: 'ลำปาง' },
-      { key: 'กรุงเทพ', search: 'กรุงเทพมหานคร' },
-      { key: 'กรุงเทพฯ', search: 'กรุงเทพมหานคร' },
-      { key: 'กทม', search: 'กรุงเทพมหานคร' },
-      { key: 'bangkok', search: 'Bangkok' },
-      { key: 'โตเกียว', search: 'Tokyo' },
-      { key: 'tokyo', search: 'Tokyo' },
-      { key: 'osaka', search: 'Osaka' },
-      { key: 'london', search: 'London' },
-      { key: 'ลอนดอน', search: 'London' },
-      { key: 'singapore', search: 'Singapore' },
-      { key: 'สิงคโปร์', search: 'Singapore' },
-      { key: 'seoul', search: 'Seoul' },
-      { key: 'โซล', search: 'Seoul' },
-      { key: 'paris', search: 'Paris' },
-      { key: 'ปารีส', search: 'Paris' },
-    ];
-
-    for (const place of popularPlaces) {
+    // 1. Direct match against known provinces / cities list
+    for (const place of THAI_PROVINCES) {
       if (raw.includes(place.key)) {
-        return place.search;
+        return place.name;
       }
     }
 
-    // English match: "weather in [City]", "temperature in [City]"
+    // 2. English match: "weather in [City]"
     const enMatch = text.match(/(?:weather|temperature|forecast)\s+(?:in|at|for|around)\s+([a-zA-Z\s]{2,20})/i);
     if (enMatch && enMatch[1]) {
       const candidate = enMatch[1].replace(/today|tomorrow|now|please|\?/gi, '').trim();
-      if (candidate.length >= 2) return candidate;
+      if (candidate.length >= 2 && !WEATHER_STOP_WORDS.has(candidate.toLowerCase())) {
+        return candidate;
+      }
     }
 
-    // English match: "[City] weather", "[City] temperature"
-    const enMatchReverse = text.match(/([a-zA-Z\s]{2,20})\s+(?:weather|temperature|forecast)/i);
-    if (enMatchReverse && enMatchReverse[1]) {
-      const candidate = enMatchReverse[1].replace(/what is the|how is the|tell me|today|tomorrow|\?/gi, '').trim();
-      if (candidate.length >= 2) return candidate;
-    }
-
-    // Thai pattern matches: "อากาศที่ [เมือง]", "อากาศแถว [เมือง]"
-    const match = text.match(/อากาศ(?:ที่|แถว|ของ|บริเวณ)?\s*([ก-๙a-zA-Z\s]{2,20})/);
+    // 3. Thai pattern matches: "อากาศที่ [เมือง]", "อากาศแถว [เมือง]", "จังหวัด [เมือง]"
+    const match = text.match(/(?:อากาศที่|อากาศแถว|อากาศของ|อากาศบริเวณ|จังหวัด|จ\.)\s*([ก-๙a-zA-Z\s]{2,20})/);
     if (match && match[1]) {
-      const candidate = match[1].replace(/เป็นไง|เป็นอย่างไร|วันนี้|พรุ่งนี้|ไหม|มั้ย|หน่อย|ด้วย/g, '').trim();
-      if (candidate.length >= 2 && candidate.length <= 15) {
+      let candidate = match[1]
+        .replace(/เป็นไง|เป็นยังไง|เป็นอย่างไร|วันนี้|พรุ่งนี้|มะรืนนี้|ไหม|มั้ย|หน่อย|ด้วย|ให้|สิ/g, '')
+        .trim();
+
+      if (
+        candidate.length >= 2 &&
+        candidate.length <= 15 &&
+        !WEATHER_STOP_WORDS.has(candidate)
+      ) {
         return candidate;
       }
     }
@@ -261,6 +385,8 @@ export class WeatherService {
   // Generate natural companion response with REAL weather data
   public async getFormattedWeatherResponse(userQuery: string): Promise<string> {
     const cityMentioned = this.extractCityFromPrompt(userQuery);
+    const { dayOffset, label: timeLabel } = this.detectDayOffset(userQuery);
+
     let targetCity = cityMentioned || this.defaultCity;
     let lat = this.defaultLat;
     let lon = this.defaultLon;
@@ -274,18 +400,29 @@ export class WeatherService {
       }
     }
 
-    const weather = await this.getLiveWeather(lat, lon, targetCity);
+    const weather = await this.getWeather(lat, lon, targetCity, dayOffset);
     if (!weather) {
       return `ขอโทษทีนะแก ตอนนี้โบ้ดึงข้อมูลสภาพอากาศของ ${targetCity} ไม่สำเร็จ สัญญาณเน็ตสะดุด ลองถามใหม่อีกทีนะ`;
     }
 
-    // Build companion response
     const cityName = weather.city;
-    const temp = weather.temperature;
-    const feel = weather.apparentTemperature;
     const cond = weather.conditionText;
     const emoji = weather.emoji;
     const advice = weather.advice;
+
+    // Tomorrow or Day After Tomorrow Forecast Response
+    if (weather.isForecast) {
+      const max = weather.tempMax ?? weather.temperature;
+      const min = weather.tempMin ?? (weather.temperature - 6);
+      const rain = weather.rainProbability ?? 0;
+      const wind = weather.windSpeed;
+
+      return `พยากรณ์อากาศ${timeLabel}ที่ ${cityName} ${emoji} ${cond} อุณหภูมิสูงสุดประมาณ ${max}°C ต่ำสุด ${min}°C โอกาสฝนตก ${rain}% ลมพัดแรงสุด ${wind} km/h นะแก ${advice}`;
+    }
+
+    // Current Live Weather Response
+    const temp = weather.temperature;
+    const feel = weather.apparentTemperature;
     const humidity = weather.humidity;
     const wind = weather.windSpeed;
 
