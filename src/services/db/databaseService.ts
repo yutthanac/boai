@@ -21,17 +21,17 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
-  wake_word: 'น้องโบ',
-  alternate_names: ['Bo AI', 'โบไอ', 'Hey Bo'],
+  wake_word: 'โบ้',
+  alternate_names: ['ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'Bo AI', 'โบไอ', 'Hey Bo'],
   sensitivity: 75,
   always_listening: true,
-  llm_provider: 'claude',
-  claude_api_key: '',
-  openai_api_key: '',
-  gemini_api_key: '',
-  claude_model: 'claude-3-5-sonnet-20241022',
-  openai_model: 'gpt-4o',
-  gemini_model: 'gemini-1.5-flash',
+  llm_provider: 'gemini',
+  claude_api_key: import.meta.env.VITE_CLAUDE_API_KEY || '',
+  openai_api_key: import.meta.env.VITE_OPENAI_API_KEY || '',
+  gemini_api_key: import.meta.env.VITE_GEMINI_API_KEY || '',
+  claude_model: import.meta.env.VITE_CLAUDE_MODEL || 'claude-3-5-sonnet-20241022',
+  openai_model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o',
+  gemini_model: import.meta.env.VITE_GEMINI_MODEL || 'gemini-flash-lite-latest',
   input_device_id: 'default',
   output_device_id: 'default',
   auto_start: true,
@@ -39,14 +39,17 @@ const DEFAULT_SETTINGS: AppSettings = {
   tts_rate: 1.0,
   tts_pitch: 1.0,
   tts_voice: 'th-TH',
+  tts_engine: 'natural_female',
+  openai_tts_voice: 'nova',
+  openai_tts_model: 'tts-1-hd',
   vad_timeout_ms: 3000,
 };
 
 const DEFAULT_PERSONALITY: PersonalityConfig = {
-  name: 'น้องโบ (Bo AI)',
-  system_prompt: `คุณคือ 'น้องโบ' ผู้ช่วย AI อัจฉริยะประจำคอมพิวเตอร์ Desktop บุคลิกอบอุ่น ฉลาด คล่องแคล่ว อ่อนหวาน เป็นกันเอง ตอบคำถามอย่างกระชับ ฉะฉาน สุภาพ มีหางเสียง คะ/ขา พร้อมช่วยเหลือผู้ใช้ทั้งการตอบคำถาม ค้นหาข้อมูล จัดการสิ่งที่ต้องทำ และควบคุมอุปกรณ์ระบบคอมพิวเตอร์อย่างปลอดภัย`,
-  speaking_style: 'เป็นกันเอง อ่อนหวาน สุภาพ มีชีวิตชีวา ใช้ภาษาไทยธรรมชาติ',
-  formality_level: 3,
+  name: 'โบ้',
+  system_prompt: `คุณคือ "โบ้" เพื่อนสนิทคู่หูของผู้ใช้ เป็นคนจริงใจ อารมณ์ดี ฉลาด เป็นกันเอง คุยสบายๆ เหมือนเพื่อนแท้ที่นั่งข้างๆ ไม่พูดทางการแบบคอลเซ็นเตอร์ ไม่ประดิษฐ์คำ ตอบกระชับ ได้ใจความ ตรงประเด็นทันที ช่วยคิด ช่วยเตือน คุยเล่นได้ทุกเรื่อง และไม่พูดถึงชื่อโมเดลหรือระบบ AI หรือ Gemini หรือ Claude เด็ดขาด`,
+  speaking_style: 'เป็นเพื่อนสนิท อารมณ์ดี จริงใจ สบายๆ คุยเป็นธรรมชาติเหมือนเพื่อนคุยกัน',
+  formality_level: 1,
 };
 
 const DEFAULT_MEMORIES: MemoryItem[] = [
@@ -128,10 +131,28 @@ export class DatabaseService {
   }
 
   private initDefaults() {
-    if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
+    const rawSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (!rawSettings) {
       this.saveSettings(DEFAULT_SETTINGS);
+    } else {
+      try {
+        const parsed = JSON.parse(rawSettings);
+        parsed.gemini_api_key = DEFAULT_SETTINGS.gemini_api_key;
+        if (!parsed.gemini_model || parsed.gemini_model === 'gemini-3.6-flash') {
+          parsed.gemini_model = 'gemini-flash-lite-latest';
+        }
+        parsed.llm_provider = 'gemini';
+        parsed.wake_word = 'โบ้';
+        parsed.tts_engine = 'natural_female';
+        parsed.alternate_names = Array.from(new Set([
+          ...(parsed.alternate_names || []),
+          'ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'Bo AI'
+        ]));
+        this.saveSettings(parsed);
+      } catch (_) {}
     }
-    if (!localStorage.getItem(STORAGE_KEYS.PERSONALITY)) {
+    const rawPers = localStorage.getItem(STORAGE_KEYS.PERSONALITY);
+    if (!rawPers || rawPers.includes('Desktop') || rawPers.includes('หางเสียง')) {
       this.savePersonality(DEFAULT_PERSONALITY);
     }
     if (!localStorage.getItem(STORAGE_KEYS.MEMORIES)) {
@@ -149,7 +170,7 @@ export class DatabaseService {
     if (!localStorage.getItem(STORAGE_KEYS.CONVERSATIONS)) {
       const initialConv: Conversation = {
         id: 'conv_default',
-        title: 'เริ่มต้นพูดคุยกับน้องโบ',
+        title: 'เริ่มต้นพูดคุยกับโบ้',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -159,7 +180,7 @@ export class DatabaseService {
           id: 'msg_welcome',
           conversation_id: 'conv_default',
           role: 'assistant',
-          content: 'สวัสดีค่ะ! น้องโบยินดีรับใช้ค่ะ เรียก "น้องโบ" หรือกดปุ่มไมโครโฟน เพื่อเริ่มพูดคุยหรือสั่งการได้เลยนะคะ ✨',
+          content: 'สวัสดีแก! โบ้พร้อมคุยแล้วนะ เรียก "โบ้" หรือ "ไอ้โบ้" แล้วถามมาได้เลย เดี๋ยวตอบให้ทันที!',
           created_at: new Date().toISOString(),
         }
       ];
@@ -170,7 +191,16 @@ export class DatabaseService {
   // Settings
   public getSettings(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : DEFAULT_SETTINGS;
+    if (!raw) return DEFAULT_SETTINGS;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed.gemini_model || parsed.gemini_model === 'gemini-3.6-flash') {
+        parsed.gemini_model = 'gemini-flash-lite-latest';
+      }
+      return { ...DEFAULT_SETTINGS, ...parsed };
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
   }
 
   public saveSettings(settings: AppSettings): void {

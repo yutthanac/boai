@@ -4,7 +4,6 @@ import {
   Send,
   Mic,
   Trash2,
-  Sparkles,
   User,
   Bot,
   Volume2,
@@ -12,6 +11,7 @@ import {
   CornerDownLeft
 } from 'lucide-react';
 import { audioService } from '../services/audio/audioService';
+import { db } from '../services/db/databaseService';
 
 export const Conversation: React.FC = () => {
   const {
@@ -34,12 +34,19 @@ export const Conversation: React.FC = () => {
     scrollToBottom();
   }, [messages, state]);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!input.trim() || state === 'thinking') return;
-    const text = input;
+    if (!input.trim() || state === 'thinking' || isSubmitting) return;
+    const text = input.trim();
     setInput('');
-    await sendMessage(text);
+    setIsSubmitting(true);
+    try {
+      await sendMessage(text);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePlayMessageAudio = (text: string) => {
@@ -78,12 +85,12 @@ export const Conversation: React.FC = () => {
       <div className="flex-1 overflow-y-auto my-4 space-y-4 pr-2">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-500">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-3">
-              <Sparkles className="w-6 h-6" />
+            <div className="w-16 h-16 rounded-2xl bg-slate-800/80 p-2 border border-white/10 flex items-center justify-center mb-3 shadow-sm">
+              <img src="/assets/images/dog.png" alt="Bo AI Dog" className="w-full h-full object-contain" />
             </div>
             <p className="text-sm font-medium text-slate-300">ยังไม่มีข้อความในการสนทนานี้</p>
             <p className="text-xs text-slate-500 mt-1">
-              เรียก "น้องโบ" หรือพิมพ์ข้อความในกล่องด้านล่างเพื่อเริ่มคุยได้ทันที
+              เรียก "โบ้" หรือพิมพ์ข้อความในกล่องด้านล่างเพื่อเริ่มคุยได้ทันที
             </p>
           </div>
         ) : (
@@ -96,8 +103,8 @@ export const Conversation: React.FC = () => {
                 className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
               >
                 {!isUser && (
-                  <div className="w-8 h-8 rounded-xl bg-blue-600 border border-blue-400/40 flex items-center justify-center text-white shrink-0 shadow-md">
-                    <Bot className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-xl bg-slate-800 border border-white/10 p-1 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                    <img src="/assets/images/dog.png" alt="Bo AI" className="w-full h-full object-contain" />
                   </div>
                 )}
 
@@ -110,7 +117,7 @@ export const Conversation: React.FC = () => {
                 >
                   <div className="flex items-center justify-between gap-4 mb-1">
                     <span className="text-[10px] font-semibold tracking-wider uppercase text-slate-400">
-                      {isUser ? 'คุณ' : 'น้องโบ (AI)'}
+                      {isUser ? 'คุณ' : 'โบ้'}
                     </span>
                     <span className="text-[10px] text-slate-500">
                       {new Date(msg.created_at).toLocaleTimeString('th-TH', {
@@ -131,7 +138,6 @@ export const Conversation: React.FC = () => {
                         <Volume2 className="w-3.5 h-3.5" />
                         อ่านออกเสียง
                       </button>
-                      <span className="text-[10px] text-slate-500 font-mono">Claude 3.5</span>
                     </div>
                   )}
                 </div>

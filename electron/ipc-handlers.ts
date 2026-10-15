@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, app } from 'electron';
+import { ipcMain, BrowserWindow, app, shell } from 'electron';
 import os from 'os';
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
@@ -22,6 +22,16 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     if (mainWindow && !mainWindow.isDestroyed()) {
       // Hide to system tray instead of destroying
       mainWindow.hide();
+    }
+  });
+
+  ipcMain.handle('open-external', async (_event, url: string) => {
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch (e) {
+      console.warn('Failed to open external url:', e);
+      return false;
     }
   });
 

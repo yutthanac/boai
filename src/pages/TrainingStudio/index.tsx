@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Sparkles,
+  UserCheck,
   BookOpen,
   MessageCircle,
   FlaskConical,
@@ -40,7 +40,7 @@ export const TrainingStudio: React.FC = () => {
 
   // Test Lab State
   const [testMessages, setTestMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
-    { role: 'assistant', content: 'สวัสดีค่ะ! ยินดีต้อนรับสู่ห้องทดลอง Test Lab คุณสามารถทดสอบถามคำถามเพื่อตรวจดูการตอบสนองตามบุคลิกและความรู้ที่ตั้งไว้ได้เลยค่ะ ✨' }
+    { role: 'assistant', content: 'สวัสดีค่ะ! ยินดีต้อนรับสู่ห้องทดลอง Test Lab คุณสามารถทดสอบถามคำถามเพื่อตรวจดูการตอบสนองตามบุคลิกและความรู้ที่ตั้งไว้ได้เลยค่ะ' }
   ]);
   const [testInput, setTestInput] = useState('');
   const [isTestThinking, setIsTestThinking] = useState(false);
@@ -144,8 +144,8 @@ export const TrainingStudio: React.FC = () => {
             <h1 className="text-xl font-bold text-white tracking-tight">
               Training Studio
             </h1>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
-              AI Calibration Center
+            <span className="text-xs px-2 py-0.5 rounded-md bg-blue-950 text-blue-300 border border-blue-800">
+              Calibration Center
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -157,7 +157,7 @@ export const TrainingStudio: React.FC = () => {
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-white/[0.06] pb-3">
         {[
-          { id: 'personality', label: 'บุคลิก (Personality)', icon: Sparkles },
+          { id: 'personality', label: 'บุคลิก (Personality)', icon: UserCheck },
           { id: 'knowledge', label: `ฐานความรู้ (${knowledgeList.length})`, icon: BookOpen },
           { id: 'examples', label: `ตัวอย่างคำตอบ (${examplesList.length})`, icon: MessageCircle },
           { id: 'testlab', label: 'Test Lab (ห้องทดสอบ)', icon: FlaskConical },
@@ -257,8 +257,8 @@ export const TrainingStudio: React.FC = () => {
               ตัวอย่างโปรไฟล์ผู้ช่วย
             </h3>
             <div className="p-4 rounded-xl bg-surface-elevated border border-white/[0.06] flex flex-col items-center text-center">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-violet-600 to-cyan-400 flex items-center justify-center text-white mb-3 shadow-[0_0_20px_rgba(139,92,246,0.4)]">
-                <Sparkles className="w-7 h-7" />
+              <div className="w-16 h-16 rounded-full overflow-hidden bg-slate-900 border border-white/20 p-1 flex items-center justify-center mb-3 shadow-md">
+                <img src="/assets/images/dog.png" alt="Profile" className="w-full h-full object-contain" />
               </div>
               <p className="text-base font-bold text-white">{personality.name}</p>
               <p className="text-xs text-violet-400 mt-0.5">{personality.speaking_style}</p>

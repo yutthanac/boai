@@ -1,10 +1,51 @@
-import { defineConfig } from 'vite';
+import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import https from 'https';
+
+const ttsPlugin: Plugin = {
+  name: 'tts-proxy-plugin',
+  configureServer(server) {
+    server.middlewares.use('/api/tts', (req, res) => {
+      try {
+        const urlObj = new URL(req.url || '', 'http://localhost');
+        const text = urlObj.searchParams.get('text') || '';
+        if (!text) {
+          res.statusCode = 400;
+          res.end('Missing text query parameter');
+          return;
+        }
+
+        const encoded = encodeURIComponent(text.slice(0, 200));
+        const targetUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=th&client=tw-ob`;
+
+        const googleReq = https.get(targetUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://translate.google.com/'
+          }
+        }, (googleRes) => {
+          res.statusCode = googleRes.statusCode || 200;
+          res.setHeader('Content-Type', googleRes.headers['content-type'] || 'audio/mpeg');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          googleRes.pipe(res);
+        });
+
+        googleReq.on('error', (err) => {
+          res.statusCode = 500;
+          res.end(err.message);
+        });
+      } catch (err: any) {
+        res.statusCode = 500;
+        res.end(err.message);
+      }
+    });
+  }
+};
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), ttsPlugin],
   base: './',
   resolve: {
     alias: {

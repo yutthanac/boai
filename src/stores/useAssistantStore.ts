@@ -27,6 +27,10 @@ interface AssistantStore {
   selectConversation: (id: string) => void;
 }
 
+let isAudioListenersBound = false;
+let lastSentMessageContent = '';
+let lastSentMessageTimestamp = 0;
+
 export const useAssistantStore = create<AssistantStore>((set, get) => ({
   state: 'idle',
   activeTab: 'home',
@@ -88,12 +92,42 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
     // Configure Wake Word
     audioService.setWakeWords(settings.wake_word, settings.alternate_names, settings.sensitivity);
 
-    // Register Wake Word trigger
-    audioService.onWakeWordDetected(() => {
-      if (!get().isMuted && get().state === 'idle') {
-        get().startVoiceInteraction();
-      }
-    });
+    // Register Audio Listeners once
+    if (!isAudioListenersBound) {
+      isAudioListenersBound = true;
+
+      // Register Wake Word trigger
+      audioService.onWakeWordDetected(() => {
+        if (!get().isMuted && get().state === 'idle') {
+          set({
+            state: 'listening',
+            statusText: 'กำลังฟังอยู่จ้า... (พูดได้เลยนะ)',
+          });
+        }
+      });
+
+      // Register Command Captured
+      audioService.onCommandCaptured(async (command: string) => {
+        if (!get().isMuted) {
+          await get().sendMessage(command);
+        }
+      });
+
+      // Register Interim Speech
+      audioService.onInterimSpeech((text: string) => {
+        if (text) {
+          set({
+            statusText: `ได้ยินว่า: "${text}"...`,
+          });
+        } else {
+          const currentSettings = db.getSettings();
+          set({
+            state: 'idle',
+            statusText: currentSettings.always_listening ? 'พร้อมรับฟัง (เรียก "โบ้")' : 'สแตนด์บาย',
+          });
+        }
+      });
+    }
 
     if (settings.always_listening) {
       audioService.startWakeWordDetection();
@@ -112,16 +146,27 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
   },
 
   sendMessage: async (text: string) => {
-    if (!text.trim()) return;
+    const cleanText = text.trim();
+    if (!cleanText) return;
+
+    // Prevent duplicate submission within 1.5 seconds
+    const now = Date.now();
+    if (cleanText.toLowerCase() === lastSentMessageContent.toLowerCase() && (now - lastSentMessageTimestamp < 1500)) {
+      console.warn('[Bo AI]: Duplicate message blocked within 1.5s:', cleanText);
+      return;
+    }
+    lastSentMessageContent = cleanText;
+    lastSentMessageTimestamp = now;
+
     const { activeConversationId } = get();
 
     // 1. Add User Message
-    const userMsg = db.addMessage(activeConversationId, 'user', text);
+    const userMsg = db.addMessage(activeConversationId, 'user', cleanText);
     const currentMsgs = [...get().messages, userMsg];
     set({
       messages: currentMsgs,
       state: 'thinking',
-      statusText: 'กำลังประมวลผลคำตอบ...',
+      statusText: 'กำลังคิดแป๊บนึงนะ...',
     });
 
     // 2. Fetch AI Response
@@ -132,19 +177,20 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
       set({
         messages: [...currentMsgs, assistantMsg],
         state: 'speaking',
-        statusText: 'กำลังพูดตอบกลับ...',
+        statusText: 'กำลังตอบกลับ...',
       });
 
       // 3. Text to Speech
       const settings = db.getSettings();
       await audioService.speak(replyText, settings.tts_rate, settings.tts_pitch);
     } catch (e: any) {
-      const errMsg = db.addMessage(activeConversationId, 'assistant', 'เกิดข้อผิดพลาดในการประมวลผลค่ะ');
+      const errMsg = db.addMessage(activeConversationId, 'assistant', 'ขอโทษทีนะแก เกิดข้อผิดพลาดนิดหน่อย ลองถามใหม่อีกทีนะ');
       set({ messages: [...currentMsgs, errMsg] });
     } finally {
+      const settings = db.getSettings();
       set({
         state: 'idle',
-        statusText: get().isAlwaysListening ? 'พร้อมรับฟัง (เรียก "น้องโบ")' : 'สแตนด์บาย',
+        statusText: settings.always_listening ? 'พร้อมรับฟัง (เรียก "โบ้")' : 'สแตนด์บาย',
       });
     }
   },
@@ -154,26 +200,8 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
 
     set({
       state: 'listening',
-      statusText: 'กำลังฟังคำสั่งของคุณ... (พูดได้เลยค่ะ)',
+      statusText: 'กำลังฟังอยู่จ้า... (พูดได้เลยนะ)',
     });
-
-    try {
-      const commandText = await audioService.listenForCommand();
-      if (!commandText) {
-        set({
-          state: 'idle',
-          statusText: 'ไม่พบเสียงคำสั่ง กลับสู่โหมดพร้อมรับฟัง',
-        });
-        return;
-      }
-
-      await get().sendMessage(commandText);
-    } catch (e) {
-      console.warn('Voice interaction error:', e);
-      set({
-        state: 'idle',
-        statusText: 'กลับสู่โหมดพร้อมรับฟัง',
-      });
-    }
+    audioService.startManualVoiceCommand();
   },
 }));

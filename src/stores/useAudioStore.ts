@@ -69,16 +69,22 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   },
 
   startMicTest: async () => {
+    if (get().isTestingMic) return;
     set({ isTestingMic: true });
     await audioService.startMicrophoneMeter(get().selectedInputId);
 
+    let lastLevel = -1;
     const interval = setInterval(() => {
       if (!get().isTestingMic) {
         clearInterval(interval);
         return;
       }
-      set({ micLevel: audioService.getMicrophoneLevel() });
-    }, 50);
+      const current = audioService.getMicrophoneLevel();
+      if (Math.abs(current - lastLevel) >= 2) {
+        lastLevel = current;
+        set({ micLevel: current });
+      }
+    }, 100);
   },
 
   stopMicTest: () => {

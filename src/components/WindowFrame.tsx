@@ -1,5 +1,4 @@
-import React from 'react';
-import { Minus, Square, X, Sparkles, Volume2, Mic, MicOff } from 'lucide-react';
+import { Minus, Square, X, Volume2, Mic, MicOff } from 'lucide-react';
 import { useAssistantStore } from '../stores/useAssistantStore';
 
 export const WindowFrame: React.FC = () => {
@@ -10,26 +9,26 @@ export const WindowFrame: React.FC = () => {
       case 'listening':
         return {
           text: 'กำลังฟังคำสั่ง...',
-          color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 animate-pulse',
-          dot: 'bg-cyan-400 animate-ping',
+          color: 'bg-cyan-950 text-cyan-300 border-cyan-800',
+          dot: 'bg-cyan-400',
         };
       case 'thinking':
         return {
           text: 'กำลังประมวลผล...',
-          color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 animate-pulse',
-          dot: 'bg-indigo-400 animate-spin',
+          color: 'bg-blue-950 text-blue-300 border-blue-800',
+          dot: 'bg-blue-400',
         };
       case 'speaking':
         return {
           text: 'กำลังพูดตอบกลับ...',
-          color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-          dot: 'bg-emerald-400 animate-bounce',
+          color: 'bg-emerald-950 text-emerald-300 border-emerald-800',
+          dot: 'bg-emerald-400',
         };
       default:
         return {
-          text: isAlwaysListening ? 'พร้อมรับฟัง (น้องโบ)' : 'สแตนด์บาย',
-          color: 'bg-slate-800/80 text-slate-300 border-slate-700/60',
-          dot: isAlwaysListening ? 'bg-indigo-400' : 'bg-slate-500',
+          text: isAlwaysListening ? 'พร้อมรับฟัง' : 'สแตนด์บาย',
+          color: 'bg-slate-900 text-slate-300 border-slate-800',
+          dot: isAlwaysListening ? 'bg-emerald-500' : 'bg-slate-500',
         };
     }
   };
@@ -37,18 +36,18 @@ export const WindowFrame: React.FC = () => {
   const badge = getStateBadge();
 
   return (
-    <header className="h-10 w-full bg-[#080B12]/90 border-b border-white/[0.06] flex items-center justify-between px-3 select-none window-drag-region z-50">
+    <header className="h-10 w-full bg-[#0b0f19] border-b border-white/[0.08] flex items-center justify-between px-3 select-none window-drag-region z-50">
       {/* Left: App Title and Icon */}
       <div className="flex items-center gap-2.5 window-no-drag">
-        <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center shadow-sm">
-          <Sparkles className="w-3 h-3 text-white" />
+        <div className="w-6 h-6 rounded-md bg-slate-800/80 p-0.5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+          <img src="/assets/images/dog.png" alt="Bo AI Dog" className="w-full h-full object-contain" />
         </div>
-        <span className="font-semibold text-xs tracking-wider text-slate-200">
-          BO AI <span className="text-[11px] font-normal text-slate-400">(น้องโบ v1.0)</span>
+        <span className="font-semibold text-xs tracking-wide text-slate-200">
+          BO AI <span className="text-[11px] font-normal text-slate-400">(น้องโบ)</span>
         </span>
 
         {/* Status Pill */}
-        <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-medium transition-all duration-300 ${badge.color}`}>
+        <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-medium transition-colors ${badge.color}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
           <span>{badge.text}</span>
         </div>

@@ -7,7 +7,7 @@ import {
   Sliders,
   Play,
   Square,
-  Sparkles,
+  Radio,
   Check,
   RefreshCw,
   Plus,
@@ -15,6 +15,8 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { db } from '../services/db/databaseService';
+import { audioService } from '../services/audio/audioService';
+import { useAssistantStore } from '../stores/useAssistantStore';
 
 export const VoiceDevices: React.FC = () => {
   const {
@@ -53,9 +55,16 @@ export const VoiceDevices: React.FC = () => {
 
   const handleSaveWakeWords = () => {
     const settings = db.getSettings();
-    settings.wake_word = wakeWord.trim() || 'น้องโบ';
+    const cleanPrimary = wakeWord.trim() || 'ไอ้โบ้';
+    settings.wake_word = cleanPrimary;
     settings.alternate_names = alternateNames;
     db.saveSettings(settings);
+
+    // Update live audio service listener immediately
+    audioService.setWakeWords(cleanPrimary, alternateNames, settings.sensitivity);
+
+    // Update status text on title bar and home
+    useAssistantStore.getState().setStatusText(`พร้อมรับฟัง (เรียก "${cleanPrimary}")`);
 
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2000);
@@ -188,8 +197,8 @@ export const VoiceDevices: React.FC = () => {
           <div className="glass-panel p-5 rounded-2xl border border-white/[0.08] space-y-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-violet-500/10 text-violet-400">
-                  <Sparkles className="w-4 h-4" />
+                <div className="w-8 h-8 rounded-lg bg-slate-800 p-1 border border-white/10 flex items-center justify-center shrink-0">
+                  <img src="/assets/images/dog.png" alt="" className="w-full h-full object-contain" />
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold text-white">Wake Word Detection</h2>

@@ -1,5 +1,7 @@
-import { ChatMessage, PersonalityConfig } from '../../types';
+import { ChatMessage, PersonalityConfig, LLMProvider } from '../../types';
 import { db } from '../db/databaseService';
+import { weatherService } from '../weather/weatherService';
+import { musicService } from '../music/musicService';
 
 export class AIService {
   private static instance: AIService;
@@ -20,32 +22,29 @@ export class AIService {
     const knowledge = db.getKnowledge();
     const examples = db.getExamples();
 
-    let prompt = `${personality.system_prompt}\n\n`;
-    prompt += `สไตล์การพูด: ${personality.speaking_style}\n`;
-    prompt += `ระดับความเป็นทางการ: ${personality.formality_level}/5\n\n`;
+    let prompt = `คุณคือ "โบ้" เพื่อนสนิทคู่หูของผู้ใช้
+แนวทางการตอบ:
+1. คุยเป็นกันเองเหมือนเพื่อนสนิทคุยกัน (แทนตัวเองว่า "เรา" หรือ "โบ้", เรียกผู้ใช้ว่า "เธอ" หรือ "แก") อารมณ์ดี จริงใจ สบายๆ เหมือนเพื่อนที่นั่งอยู่ข้างๆ
+2. ตอบกระชับ ตรงประเด็น ฉลาด มีประโยชน์ ช่วยคิด ช่วยแก้ปัญหาได้ทันที
+3. ห้ามพูดถึงคำว่า AI, LLM, Gemini, OpenAI, Claude, API หรือคำศัพท์เทคนิคระบบเด็ดขาด และไม่ต้องแนะนำตัวเป็นระบบ
+4. ไม่พูดทางการแบบคอลเซ็นเตอร์ ไม่ต้องลงท้าย คะ/ขา แข็งๆ ให้ใช้ภาษาพูดที่เป็นธรรมชาติ เช่น จ้า, นะ, ล่ะ, ได้เลย, ว่าไงแก
+\n`;
 
     if (memories.length > 0) {
-      prompt += `--- ความจำระยะยาวเกี่ยวกับผู้ใช้ (User Memories) ---\n`;
+      prompt += `--- เรื่องที่จำได้เกี่ยวกับเพื่อนคนนี้ ---\n`;
       memories
         .sort((a, b) => b.importance - a.importance)
         .slice(0, 8)
         .forEach(m => {
-          prompt += `- [ความสำคัญ ${m.importance}/5, หมวด ${m.category}] ${m.content}\n`;
+          prompt += `- ${m.content}\n`;
         });
       prompt += `\n`;
     }
 
     if (knowledge.length > 0) {
-      prompt += `--- ฐานความรู้เฉพาะ (Knowledge Base) ---\n`;
+      prompt += `--- ข้อมูลและความรู้เสริม ---\n`;
       knowledge.slice(0, 5).forEach(k => {
-        prompt += `หัวข้อ: ${k.title}\nเนื้อหา: ${k.content}\n\n`;
-      });
-    }
-
-    if (examples.length > 0) {
-      prompt += `--- ตัวอย่างบทสนทนา (Few-shot Examples) ---\n`;
-      examples.slice(0, 3).forEach(ex => {
-        prompt += `ผู้ใช้: ${ex.user_query}\nน้องโบ: ${ex.expected_response}\n\n`;
+        prompt += `${k.title}: ${k.content}\n\n`;
       });
     }
 
@@ -65,19 +64,23 @@ export class AIService {
 
     // 2. Call configured LLM Provider
     try {
-      if (settings.llm_provider === 'claude' && settings.claude_api_key) {
-        return await this.callClaude(messages, systemPrompt, settings.claude_api_key, settings.claude_model);
-      } else if (settings.llm_provider === 'openai' && settings.openai_api_key) {
-        return await this.callOpenAI(messages, systemPrompt, settings.openai_api_key, settings.openai_model);
-      } else if (settings.llm_provider === 'gemini' && settings.gemini_api_key) {
+      if (settings.llm_provider === 'gemini' && settings.gemini_api_key) {
         return await this.callGemini(messages, systemPrompt, settings.gemini_api_key, settings.gemini_model);
+      } else if (settings.llm_provider === 'openai' && settings.openai_api_key) {
+        return await this.callOpenAI(messages, systemPrompt, settings.openai_api_key, settings.openai_model || 'gpt-4o');
+      } else if (settings.llm_provider === 'claude' && settings.claude_api_key) {
+        return await this.callClaude(messages, systemPrompt, settings.claude_api_key, settings.claude_model);
+      } else if (settings.gemini_api_key) {
+        return await this.callGemini(messages, systemPrompt, settings.gemini_api_key, settings.gemini_model);
+      } else if (settings.openai_api_key) {
+        return await this.callOpenAI(messages, systemPrompt, settings.openai_api_key, settings.openai_model || 'gpt-4o');
       }
     } catch (err: any) {
-      console.warn('API call error, switching to intelligent local simulator:', err);
-      return `(คำเตือน: การเชื่อมต่อ API เกิดข้อผิดพลาด ${err?.message || ''}) น้องโบขอตอบเบื้องต้นนะคะ: รับทราบคำถามเรื่อง "${latestUserMessage}" แล้วค่ะ กรุณาตรวจสอบ API Key ในหน้า Settings อีกครั้งนะคะ`;
+      console.warn('API call error, falling back:', err);
+      return `ขอโทษทีนะแก สัญญาณสะดุดไปนิดนึง ลองถามใหม่อีกทีนะ`;
     }
 
-    // 3. Fallback / Offline / Demo responses when no API Key is set yet
+    // 3. Fallback / Offline responses
     return this.generateSmartDemoResponse(latestUserMessage);
   }
 
@@ -146,59 +149,152 @@ export class AIService {
 
   // Gemini
   private async callGemini(messages: ChatMessage[], systemPrompt: string, apiKey: string, model: string): Promise<string> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${apiKey}`;
+    const candidateModels = [
+      model && model !== 'gemini-3.6-flash' ? model : 'gemini-flash-lite-latest',
+      'gemini-flash-lite-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-3.6-flash'
+    ];
+    const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
 
-    const contents = [
-      {
-        role: 'user',
-        parts: [{ text: `Instruction/System prompt:\n${systemPrompt}` }],
-      },
-      ...messages.map(m => ({
+    // Keep conversation context snappy and fast (last 8 messages)
+    const recentMessages = messages.slice(-8);
+    const contents = recentMessages
+      .filter(m => m.role !== 'system')
+      .map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
-      })),
-    ];
+      }));
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
+    if (contents.length === 0) {
+      contents.push({ role: 'user', parts: [{ text: 'สวัสดี' }] });
     }
 
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'ขออภัยค่ะ ไม่พบผลลัพธ์';
+    const payload: any = {
+      contents,
+      systemInstruction: {
+        parts: [{ text: systemPrompt }],
+      },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 256,
+      },
+    };
+
+    let lastError: any = null;
+    for (const m of uniqueModels) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          return data.candidates?.[0]?.content?.parts?.[0]?.text || 'ขอโทษทีนะแก ไม่พบคำตอบ';
+        }
+
+        const err = await res.json().catch(() => ({}));
+        lastError = new Error(err.error?.message || `HTTP ${res.status}`);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    throw lastError || new Error('Gemini API call failed');
+  }
+
+  // Live Test Provider Connection
+  public async testProviderConnection(provider: LLMProvider, customKey?: string): Promise<{ success: boolean; message: string; model?: string }> {
+    const settings = db.getSettings();
+    const personality = db.getPersonality();
+    const testMsg: ChatMessage = {
+      id: 'test_conn',
+      conversation_id: 'test',
+      role: 'user',
+      content: 'สวัสดี',
+      created_at: new Date().toISOString(),
+    };
+
+    try {
+      if (provider === 'gemini') {
+        const key = customKey || settings.gemini_api_key;
+        if (!key) {
+          return { success: false, message: 'ยังไม่ได้ระบุ Gemini API Key' };
+        }
+        const resp = await this.callGemini([testMsg], personality.system_prompt, key, settings.gemini_model || 'gemini-flash-lite-latest');
+        return { success: true, message: resp.trim(), model: settings.gemini_model || 'gemini-flash-lite-latest' };
+      }
+
+      if (provider === 'openai') {
+        const key = customKey || settings.openai_api_key;
+        if (!key) {
+          return { success: false, message: 'ยังไม่ได้ระบุ OpenAI API Key' };
+        }
+        const resp = await this.callOpenAI([testMsg], personality.system_prompt, key, settings.openai_model || 'gpt-4o');
+        return { success: true, message: resp.trim(), model: settings.openai_model || 'gpt-4o' };
+      }
+
+      if (provider === 'claude') {
+        const key = customKey || settings.claude_api_key;
+        if (!key) {
+          return { success: false, message: 'ยังไม่ได้ระบุ Claude API Key' };
+        }
+        const resp = await this.callClaude([testMsg], personality.system_prompt, key, settings.claude_model);
+        return { success: true, message: resp.trim(), model: settings.claude_model };
+      }
+
+      return { success: false, message: 'ไม่พบผู้ให้บริการที่ระบุ' };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'การเชื่อมต่อล้มเหลว' };
+    }
   }
 
   // Quick intent & Tool dispatcher
   public async tryExecuteToolIntent(text: string): Promise<string | null> {
     const lower = text.toLowerCase();
 
-    // Weather tool
-    if (lower.includes('อากาศ') || lower.includes('ฝน') || lower.includes('weather')) {
-      return 'วันนี้อุณหภูมิประมาณ 32°C ท้องฟ้าแจ่มใส มีเมฆบางส่วน ดัชนี UV ปานกลาง และมีความชื้น 65% ค่ะ สภาพอากาศเหมาะกับการทำงานหรือออกกำลังกายช่วงเย็นนะคะ ☀️';
+    // Weather tool (Open-Meteo Real-time API: https://open-meteo.com)
+    const isWeatherQuery = (
+      lower.includes('อากาศ') ||
+      lower.includes('สภาพอากาศ') ||
+      lower.includes('ฝน') ||
+      lower.includes('weather') ||
+      lower.includes('อุณหภูมิ') ||
+      lower.includes('ร้อนไหม') ||
+      lower.includes('หนาวไหม')
+    ) && !lower.includes('ทำไมฝน') && !lower.includes('ฝนเกิดจาก');
+
+    if (isWeatherQuery) {
+      try {
+        const liveWeather = await weatherService.getFormattedWeatherResponse(text);
+        if (liveWeather) return liveWeather;
+      } catch (err) {
+        console.warn('Open-Meteo live weather fetch error:', err);
+      }
     }
 
-    // Music / Media Control
-    if (lower.includes('เพลง') || lower.includes('play') || lower.includes('music')) {
-      return 'กำลังเปิดเพลย์ลิสต์ "Coding Focus Lo-fi Chill" สำหรับการทำงานให้ค่ะ สามารถสั่ง "หยุดเพลง" หรือ "เพลงถัดไป" ได้เสมอนะคะ 🎵';
+    // Music / YouTube Music Integration
+    if (musicService.isMusicIntent(text)) {
+      const songInfo = musicService.openMusic(text);
+      return `จัดไปแก! โบ้เปิดเพลง "${songInfo.query}" บน YouTube Music ให้แล้วนะ นั่งฟังชิลๆ ได้เลย 🎵🎧`;
     }
 
     // Reminders
     if (lower.includes('เตือน') || lower.includes('นัด') || lower.includes('reminder')) {
-      const newRem = db.addReminder(text.replace(/เตือน|ช่วยเตือน|บันทึก/g, '').trim() || 'รายการเตือนความจำใหม่', 'เร็วๆ นี้');
-      return `น้องโบบันทึกการแจ้งเตือน "${newRem.title}" ลงในตารางเรียบร้อยแล้วค่ะ! ⏰`;
+      const newRem = db.addReminder(text.replace(/เตือน|ช่วยเตือน|บันทึก/g, '').trim() || 'รายการเตือนใหม่', 'เร็วๆ นี้');
+      return `เราจดเรื่อง "${newRem.title}" ไว้ให้เรียบร้อยแล้วนะแก เดี๋ยวเตือนให้แน่นอน ⏰`;
     }
 
     // Memory query
     if (lower.includes('จำ') || lower.includes('ข้อมูลของฉัน') || lower.includes('ประวัติ')) {
       const memories = db.getMemories();
       if (memories.length > 0) {
-        return `น้องโบจำเรื่องของคุณได้ ${memories.length} รายการ เช่น "${memories[0].content}" สามารถดูหรือจัดการเพิ่มเติมได้ที่เมนู Memory นะคะ 💡`;
+        return `เราจำเรื่องของแกได้อยู่แล้ว เช่น "${memories[0].content}" มีอะไรอยากเล่าหรือให้ช่วยจำเพิ่มบอกได้เลยนะ`;
       }
     }
 
@@ -207,22 +303,21 @@ export class AIService {
 
   // Smart Offline/Local Demo Generator adhering to Personality
   private generateSmartDemoResponse(userText: string): string {
-    const personality = db.getPersonality();
     const lower = userText.toLowerCase();
 
     if (lower.includes('สวัสดี') || lower.includes('หวัดดี') || lower.includes('hi') || lower.includes('hello')) {
-      return `สวัสดีค่ะ! น้องโบพร้อมช่วยเหลือค่ะ วันนี้มีอะไรให้ช่วยค้นหา คำนวณ หรือจัดการงานบนเครื่องคอมพิวเตอร์มั้ยคะ? 😊`;
+      return `หวัดดีแก! มีอะไรให้เราช่วยคิดหรือชวนคุย บอกได้เลยนะ`;
     }
 
-    if (lower.includes('ทำอะไรได้บ้าง') || lower.includes('ฟีเจอร์') || lower.includes('ช่วยอะไร')) {
-      return `น้องโบสามารถช่วยคุณได้หลากหลายเลยค่ะ:\n• ตอบคำถามและให้คำปรึกษาด้วยเสียงภาษาไทย\n• จดจำข้อมูลและรสนิยมของคุณ (Memory System)\n• ฝึกฝนความรู้และปรับบุคลิกตามใจคุณ (Training Studio)\n• เช็คสภาพอากาศ คุมเครื่องเล่นเพลง และจัดการสิ่งที่ต้องทำ\nคุณสามารถลองสั่งงานด้วยเสียงหรือข้อความได้เลยนะคะ ✨`;
+    if (lower.includes('ทำอะไรได้บ้าง') || lower.includes('ช่วยอะไร')) {
+      return `เราคุยเล่นเป็นเพื่อนได้ ช่วยคิดงาน สรุปข้อมูล จดบันทึกสิ่งที่ต้องทำ หรือเตือนความจำก็ได้นะ มีเรื่องอะไรเล่าให้ฟังได้เลย!`;
     }
 
-    if (lower.includes('ชื่ออะไร') || lower.includes('ใครสร้าง')) {
-      return `น้องโบคือผู้ช่วยส่วนตัว ${personality.name} ประจำระบบ Windows ของคุณค่ะ พัฒนาขึ้นมาเพื่อให้คุณมี AI ประจำเครื่องที่เก่งและปลอดภัยที่สุดค่ะ!`;
+    if (lower.includes('ชื่ออะไร') || lower.includes('ใคร')) {
+      return `เราคือโบ้ไง เพื่อนแกที่คอยช่วยอยู่ตรงนี้ มีอะไรปรึกษาได้หมดเลยนะ`;
     }
 
-    return `น้องโบเข้าใจแล้วค่ะสำหรับ "${userText}"! ตอนนี้กำลังทำงานในโหมดสาธิต (Demo Mode) หากต้องการคำตอบแบบเต็มพิกัดจาก Claude 3.5 Sonnet สามารถนำ Anthropic API Key มาใส่ที่หน้า Settings ได้เลยนะคะ น้องโบยินดีตอบทุกคำถามค่ะ 🌸`;
+    return `เราฟังอยู่จ้า เรื่อง "${userText}" อยากให้ช่วยอะไรต่อบอกมาได้เลยนะ`;
   }
 }
 

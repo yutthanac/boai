@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Sparkles,
+  Home,
   MessageSquare,
   Mic2,
   GraduationCap,
@@ -8,7 +8,6 @@ import {
   Wrench,
   Settings,
   Radio,
-  Power
 } from 'lucide-react';
 import { useAssistantStore } from '../stores/useAssistantStore';
 
@@ -16,10 +15,10 @@ export const Sidebar: React.FC = () => {
   const { activeTab, setActiveTab, isAlwaysListening, toggleAlwaysListening } = useAssistantStore();
 
   const navItems = [
-    { id: 'home', label: 'หน้าหลัก (Home)', icon: Sparkles, badge: null },
+    { id: 'home', label: 'หน้าหลัก (Home)', icon: Home, badge: null },
     { id: 'conversation', label: 'การสนทนา (Chat)', icon: MessageSquare, badge: null },
     { id: 'voice', label: 'เสียง & อุปกรณ์ (Voice)', icon: Mic2, badge: null },
-    { id: 'training', label: 'Training Studio', icon: GraduationCap, badge: 'ใหม่' },
+    { id: 'training', label: 'Training Studio', icon: GraduationCap, badge: null },
     { id: 'memory', label: 'ความจำ (Memory)', icon: Brain, badge: null },
     { id: 'tools', label: 'เครื่องมือ (Tools)', icon: Wrench, badge: null },
     { id: 'settings', label: 'ตั้งค่า (Settings)', icon: Settings, badge: null },

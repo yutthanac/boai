@@ -5,11 +5,11 @@ import {
   Mic,
   MessageSquare,
   Sliders,
-  Sparkles,
   ShieldCheck,
   BrainCircuit,
   Zap,
-  ArrowRight
+  ArrowRight,
+  BookOpen
 } from 'lucide-react';
 import { db } from '../services/db/databaseService';
 
@@ -59,18 +59,15 @@ export const Home: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Center AI Orb */}
+      {/* Main Center AI Companion */}
       <div className="glass-panel rounded-2xl p-6 border border-white/[0.08] relative overflow-hidden flex flex-col items-center">
-        {/* Subtle grid backdrop */}
-        <div className="absolute inset-0 bg-[radial-gradient(#6366f115_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
-
         <AiOrbVisualizer />
 
         {/* Last message callout */}
         {lastMessage && (
           <div className="mt-4 max-w-lg w-full p-3 rounded-xl bg-surface-elevated/70 border border-white/[0.06] flex items-start gap-3">
-            <div className="w-6 h-6 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
-              <Sparkles className="w-3.5 h-3.5" />
+            <div className="w-6 h-6 rounded-md bg-slate-800 p-0.5 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+              <img src="/assets/images/dog.png" alt="" className="w-full h-full object-contain" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[10px] uppercase font-semibold text-slate-400">
@@ -82,7 +79,7 @@ export const Home: React.FC = () => {
             </div>
             <button
               onClick={() => setActiveTab('conversation')}
-              className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 shrink-0"
+              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 shrink-0"
             >
               ดูแชท <ArrowRight className="w-3 h-3" />
             </button>
@@ -137,8 +134,8 @@ export const Home: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400">ฐานความรู้ (Knowledge)</span>
-            <div className="p-1.5 rounded-md bg-violet-500/10 text-violet-400">
-              <Sparkles className="w-4 h-4" />
+            <div className="p-1.5 rounded-md bg-blue-500/10 text-blue-400">
+              <BookOpen className="w-4 h-4" />
             </div>
           </div>
           <p className="text-lg font-bold text-white mt-2 font-mono">

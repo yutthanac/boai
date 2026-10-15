@@ -75,6 +75,9 @@ export interface AppSettings {
   tts_rate: number;
   tts_pitch: number;
   tts_voice: string;
+  tts_engine: 'natural_female' | 'openai' | 'browser';
+  openai_tts_voice: 'nova' | 'shimmer' | 'alloy' | 'echo' | 'fable' | 'onyx';
+  openai_tts_model: 'tts-1' | 'tts-1-hd';
   vad_timeout_ms: number;
 }
 
