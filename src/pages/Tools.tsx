@@ -98,13 +98,35 @@ export const Tools: React.FC = () => {
     setReminders(reminders.filter((r) => r.id !== id));
   };
 
+  const [systemActionResultMsg, setSystemActionResultMsg] = useState<string | null>(null);
+
   const triggerSystemAction = (actionName: string) => {
     setPendingAction(actionName);
     setShowConfirmModal(true);
   };
 
-  const confirmSystemAction = () => {
-    alert(`ยืนยันการดำเนินการคำสั่งระบบ: "${pendingAction}" สำเร็จ`);
+  const confirmSystemAction = async () => {
+    if (!pendingAction) return;
+    try {
+      if ((window as any).electronAPI?.executeSystemAction) {
+        if (pendingAction.includes('ล็อคหน้าจอ')) {
+          await (window as any).electronAPI.executeSystemAction('lock');
+        } else if (pendingAction.includes('เครื่องคิดเลข')) {
+          await (window as any).electronAPI.executeSystemAction('calc');
+        } else if (pendingAction.includes('Notepad')) {
+          await (window as any).electronAPI.executeSystemAction('notepad');
+        } else if (pendingAction.includes('Task Manager')) {
+          await (window as any).electronAPI.executeSystemAction('taskmgr');
+        } else if (pendingAction.includes('โฟลเดอร์')) {
+          await (window as any).electronAPI.executeSystemAction('explorer');
+        }
+      }
+      setSystemActionResultMsg(`ดำเนินการคำสั่ง "${pendingAction}" สำเร็จ`);
+      setTimeout(() => setSystemActionResultMsg(null), 3000);
+    } catch (e: any) {
+      setSystemActionResultMsg(`เกิดข้อผิดพลาด: ${e?.message}`);
+      setTimeout(() => setSystemActionResultMsg(null), 3000);
+    }
     setShowConfirmModal(false);
     setPendingAction(null);
   };
@@ -309,24 +331,43 @@ export const Tools: React.FC = () => {
           </span>
         </div>
 
+        {systemActionResultMsg && (
+          <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <span>{systemActionResultMsg}</span>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => triggerSystemAction('ล็อคหน้าจอคอมพิวเตอร์ (Lock Screen)')}
-            className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-300 border border-white/10 transition-colors"
+            className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-xs text-rose-300 border border-rose-500/30 transition-colors flex items-center gap-1.5"
           >
-            สั่งล็อคหน้าจอ
+            🔒 สั่งล็อคหน้าจอ
           </button>
           <button
-            onClick={() => triggerSystemAction('เปิดโฟลเดอร์ดาวน์โหลด (Open Downloads)')}
-            className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-300 border border-white/10 transition-colors"
+            onClick={() => triggerSystemAction('เปิดเครื่องคิดเลข (Calculator)')}
+            className="px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-xs text-cyan-300 border border-cyan-500/30 transition-colors flex items-center gap-1.5"
           >
-            เปิดโฟลเดอร์งาน
+            🧮 เปิดเครื่องคิดเลข
           </button>
           <button
-            onClick={() => triggerSystemAction('ล้างไฟล์ขยะชั่วคราว (Clear Temp Files)')}
-            className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-xs text-rose-300 border border-rose-500/30 transition-colors"
+            onClick={() => triggerSystemAction('เปิด Notepad (สมุดจด)')}
+            className="px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-xs text-indigo-300 border border-indigo-500/30 transition-colors flex items-center gap-1.5"
           >
-            ล้างแคชชั่วคราว
+            📝 เปิด Notepad
+          </button>
+          <button
+            onClick={() => triggerSystemAction('เปิด Task Manager (จัดการระบบ)')}
+            className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-300 border border-white/10 transition-colors flex items-center gap-1.5"
+          >
+            ⚙️ เปิด Task Manager
+          </button>
+          <button
+            onClick={() => triggerSystemAction('เปิดโฟลเดอร์ไฟล์ (File Explorer)')}
+            className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-300 border border-white/10 transition-colors flex items-center gap-1.5"
+          >
+            📁 เปิด File Explorer
           </button>
         </div>
       </div>

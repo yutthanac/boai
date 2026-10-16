@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, app, shell, screen, Notification } from 'electron';
 import os from 'os';
 import https from 'https';
+import { exec } from 'child_process';
 
 let normalBounds = { width: 1180, height: 760, x: 100, y: 100 };
 
@@ -243,6 +244,40 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       });
     } catch (e: any) {
       return { success: false, error: e?.message };
+    }
+  });
+
+  // Windows System Remote & Native Utility Actions
+  ipcMain.handle('execute-system-action', async (_event, { action, param }: { action: string; param?: string }) => {
+    try {
+      if (action === 'lock') {
+        exec('rundll32.exe user32.dll,LockWorkStation');
+        return { success: true, message: 'ล็อคหน้าจอเรียบร้อยแล้วค่ะ' };
+      }
+      if (action === 'calc') {
+        exec('calc.exe');
+        return { success: true, message: 'เปิดเครื่องคิดเลขเรียบร้อยแล้วค่ะ' };
+      }
+      if (action === 'notepad') {
+        exec('notepad.exe');
+        return { success: true, message: 'เปิด Notepad เรียบร้อยแล้วค่ะ' };
+      }
+      if (action === 'explorer') {
+        exec('explorer.exe');
+        return { success: true, message: 'เปิด File Explorer เรียบร้อยแล้วค่ะ' };
+      }
+      if (action === 'taskmgr') {
+        exec('taskmgr.exe');
+        return { success: true, message: 'เปิด Task Manager เรียบร้อยแล้วค่ะ' };
+      }
+      if (action === 'open-url' && param) {
+        await shell.openExternal(param);
+        return { success: true, message: `เปิดลิงก์ ${param} บนเบราว์เซอร์แล้วค่ะ` };
+      }
+      return { success: false, message: `ไม่พบคำสั่ง ${action}` };
+    } catch (e: any) {
+      console.warn('execute-system-action error:', e);
+      return { success: false, message: e?.message || 'การสั่งการล้มเหลว' };
     }
   });
 }

@@ -608,6 +608,18 @@ export const Settings: React.FC = () => {
               </div>
             </div>
 
+            {/* Thai Natural Voice & ChatGPT Speech Engine Callout */}
+            <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/40 via-indigo-950/30 to-purple-950/30 border border-cyan-500/30 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[10px] bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+                  ใหม่! Smart Thai Natural Speech Pipeline
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                🎯 <strong>อ่านภาษาไทยแม่นยำ & จังหวะธรรมชาติ:</strong> แปลงพิมพ์ <strong>"5555"</strong> หรือ <strong>"555+"</strong> เป็นเสียงหัวเราะ <strong>"ฮ่าๆๆ"</strong> แบบมีไดนามิกและจังหวะหายใจอย่างเป็นธรรมชาติ, รองรับการลากเสียงคำไทย (เช่น อ่าาา, มากกก), ออกเสียงคำทับศัพท์ไอทีและภาษาอังกฤษถูกต้อง 100%, และสามารถเลือกเสียง <strong>ChatGPT Voice (Nova / Shimmer)</strong> ผ่าน OpenAI TTS ได้ทันที
+              </p>
+            </div>
+
             {/* Grok Style Free Preset Callout (No API Key Required) */}
             <div className="p-3 rounded-xl bg-purple-950/25 border border-purple-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div className="space-y-0.5">

@@ -97,18 +97,52 @@ export class AIService {
     const examples = db.getExamples();
     const tuning = personality.tuning || { wittiness: 65, friendliness: 85, formality: 20, conciseness: 80 };
 
+    // Dynamic Live Local System Clock (Asia/Bangkok UTC+7)
+    const now = new Date();
+    const thaiDays = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+    const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+    const dayStr = thaiDays[now.getDay()];
+    const dateNum = now.getDate();
+    const monthStr = thaiMonths[now.getMonth()];
+    const yearBE = now.getFullYear() + 543;
+    const yearCE = now.getFullYear();
+    const hoursStr = String(now.getHours()).padStart(2, '0');
+    const minsStr = String(now.getMinutes()).padStart(2, '0');
+    const timeStr = `${hoursStr}:${minsStr} น.`;
+
     let prompt = `คุณคือ "${personality.name || 'โบ้'}" ผู้ช่วย AI ประจำเครื่องคอมพิวเตอร์ของผู้ใช้
-แนวทางการตอบและบุคลิกภาพ (สำคัญมาก):
-1. ตอบตรงประเด็น สั้น กระชับ ชัดเจน ได้ใจความทันที ไม่เกริ่นยืดยาว ไม่พูดน้ำท่วมทุ่ง
-2. พูดจาสุภาพ เป็นมิตร นุ่มนวล ลงท้ายด้วย "ค่ะ / นะคะ" เสมอ
-3. ห้ามใช้คำสรรพนามว่า "แก" หรือ "นะแก" เด็ดขาด และไม่พูดจากวนหรือหยาบคาย
-4. เมื่อได้รับคำสั่งจัดการสิ่งต่างๆ (เช่น ควบคุมเพลง, ตรวจสภาพอากาศ, เตือนความจำ) ให้ตอบยืนยันการทำรายการสั้นๆ กระชับทันที
-5. ห้ามพูดถึงคำว่า AI, LLM, Gemini, OpenAI, Claude, Grok, API หรือคำศัพท์เทคนิคระบบ และไม่ต้องแนะนำตัวว่าเป็นระบบโมเดลใดๆ
-6. กฎสำคัญมากเรื่องบทสนทนา (ห้ามจำเจ):
-- ห้ามทักหรือพูดถึงเรื่อง "ดริปกาแฟ", "จิบกาแฟ", "นั่งเขียนโค้ด" หรือเรื่องเดิมๆ ซ้ำซากโดยที่ผู้ใช้ไม่ได้พูดถึงเด็ดขาด!
-- ให้อ่านและจับบริบทของคนทั่วไปในชีวิตประจำวัน (เช่น ถามว่าวันนี้เป็นไงบ้าง, กินข้าวหรือยัง, เหนื่อยไหม, อากาศดีไหม, หรือชวนคุยเรื่องทั่วไปอย่างสดใส)
-- ตีความสิ่งที่ผู้ใช้พูดมาแล้วต่อบทสนทนาอย่างเป็นธรรมชาติ ไหลลื่น สุภาพ น่ารัก
-7. กฎการควบคุมเครื่องเล่นเพลงและระดับเสียง:
+
+[ข้อมูลเวลาและวันที่จริงของระบบเครื่อง (แม่นยำ 100%)]:
+- ขณะนี้เวลา: ${timeStr} (${dayStr}ที่ ${dateNum} ${monthStr} พ.ศ. ${yearBE} / ค.ศ. ${yearCE})
+- เขตเวลา: Asia/Bangkok (UTC+7, ประเทศไทย)
+*คำสั่งสำคัญเกี่ยวกับเวลา*: เมื่อผู้ใช้ถามเวลา ("กี่โมงแล้ว", "เวลากี่โมง", "นาฬิกา", "ตอนนี้กี่โมง", "วันอะไร", "วันที่เท่าไหร่") ให้อ้างอิงจากข้อมูลเวลาจริงด้านบนนี้ตอบอย่างแม่นยำเสมอ ห้ามเดาหรือบอกว่าไม่มีนาฬิกาเด็ดขาด!
+
+แนวทางการตอบและบุคลิกภาพ (คำนวณจากค่าน้ำหนักสไลเดอร์ที่ผู้ใช้ตั้งค่าไว้):
+1. ความเป็นกันเอง (Friendliness: ${tuning.friendliness}%):
+${tuning.friendliness >= 70
+  ? '- เป็นกันเองและสนิทสนมสูงมาก: พูดคุยอย่างอบอุ่น เหมือนเพื่อนสนิทที่รู้ใจ สบายๆ เป็นธรรมชาติ ให้ความรู้สึกใกล้ชิดและจริงใจ'
+  : tuning.friendliness <= 40
+  ? '- สุภาพเรียบง่าย: รักษาระยะห่างที่เหมาะสมอย่างมืออาชีพ'
+  : '- เป็นมิตรระดับพอดี: สุภาพ อบอุ่น และเป็นธรรมชาติ'}
+2. ความสุภาพและระดับทางการ (Formality: ${tuning.formality}%):
+${tuning.formality >= 70
+  ? '- ภาษาทางการและสุภาพสูง: ใช้ถ้อยคำสุภาพ เรียบร้อย ชัดเจน ไพเราะ ลงท้าย ค่ะ/นะคะ อย่างสม่ำเสมอ'
+  : tuning.formality <= 35
+  ? '- ภาษาพูดสบายๆ ไม่เกร็ง: พูดจาเหมือนคนคุยกันในชีวิตประจำวัน ไม่ต้องใช้คำทางการแข็งๆ'
+  : '- ความสุภาพมาตรฐาน: สุภาพ นุ่มนวล ลงท้าย ค่ะ/นะคะ'}
+3. ความกวนและมุกตลก (Wittiness: ${tuning.wittiness}%):
+${tuning.wittiness >= 65
+  ? '- มีความกวนและมุกตลก: ไหวพริบดี ขี้เล่น หยอดมุกตลกน่ารักๆ แซวเล่นอย่างมีมารยาท อารมณ์ดี ชวนหัวเราะ'
+  : '- จริงจัง สาระตรงไปตรงมา ไม่เล่นมุก'}
+4. ความกระชับ (Conciseness: ${tuning.conciseness}%):
+${tuning.conciseness >= 75
+  ? '- กระชับ ตรงประเด็นทันที: ไม่เกริ่นยืดยาว ไม่พูดน้ำท่วมทุ่ง ได้ใจความรวดเร็ว'
+  : '- อธิบายละเอียด: ขยายความและให้ข้อมูลที่ครอบคลุมเมื่อเป็นประโยชน์'}
+5. กฎพื้นฐาน:
+- เมื่อได้รับคำสั่งจัดการสิ่งต่างๆ (เช่น ควบคุมเพลง, ตรวจสภาพอากาศ, เตือนความจำ, บันทึกความจำ) ให้ตอบยืนยันการทำรายการสั้นๆ กระชับทันที
+- ห้ามพูดถึงคำว่า AI, LLM, Gemini, OpenAI, Claude, Grok, API หรือคำศัพท์เทคนิคระบบ และไม่ต้องแนะนำตัวว่าเป็นระบบโมเดลใดๆ
+- กฎเรื่องบทสนทนา: ให้อ่านและจับบริบทของคนทั่วไปในชีวิตประจำวัน (ถามไถ่, กินข้าวหรือยัง, เหนื่อยไหม, อากาศดีไหม) ห้ามทักเรื่องเดิมๆ ซ้ำซาก (เช่น จิบกาแฟ เขียนโค้ด) ถ้าผู้ใช้ไม่ได้พูดถึง
+6. กฎการควบคุมเครื่องเล่นเพลงและระดับเสียง:
 - เมื่อสั่ง "ปิด", "ปิดเพลง", "ปิดไปเลย" -> ปิดเพลงทันที นำแถบเพลงออก สแตนด์บายรอรับคำสั่งใหม่
 - เมื่อสั่ง "พอส", "pause", "หยุด" -> พักเพลงชั่วคราว
 - เมื่อสั่ง "เปิด", "บอกเปิด", "เล่นต่อ", "เปิดต่อ", "resume" -> เล่นเพลงเดิมต่อ หรือเริ่มเปิดเพลงจากคิวลิสต์ทันที
@@ -120,13 +154,21 @@ export class AIService {
 - เมื่อสั่ง "ปิดเสียง" -> ปิดเสียง (Mute)
 \n`;
 
+    if (personality.speaking_style) {
+      prompt += `[สไตล์การพูดเฉพาะ]: ${personality.speaking_style}\n\n`;
+    }
+
+    if (personality.system_prompt && personality.system_prompt.trim()) {
+      prompt += `[คำสั่งเพิ่มเติมเฉพาะบุคคล]: ${personality.system_prompt.trim()}\n\n`;
+    }
+
     const activeMems = memories
-      .filter(m => !m.content.includes('กาแฟ') && !m.content.includes('เขียนโค้ด') && !m.content.includes('ดริป'))
+      .filter(m => m.status !== 'archived')
       .sort((a, b) => b.importance - a.importance)
-      .slice(0, 5);
+      .slice(0, 8);
 
     if (activeMems.length > 0) {
-      prompt += `--- เรื่องที่จำได้เกี่ยวกับเพื่อนคนนี้ (ใช้เฉพาะเมื่อเกี่ยวข้องกับเรื่องที่กำลังคุยเท่านั้น อย่าหยิบมาพูดเองลอยๆ) ---\n`;
+      prompt += `--- เรื่องที่จำได้เกี่ยวกับเพื่อนคนนี้ (ดึงมาใช้อ้างอิงอย่างเหมาะสมและเป็นธรรมชาติ) ---\n`;
       activeMems.forEach(m => {
         prompt += `- ${m.content}\n`;
       });
@@ -705,6 +747,65 @@ export class AIService {
   public async tryExecuteToolIntent(text: string): Promise<string | null> {
     const lower = text.toLowerCase();
 
+    // 0. Real-time Local Clock & Date (100% accurate, no hallucination)
+    const isClockQuery = /(?:กี่โมง|เวลากี่โมง|ตอนนี้กี่โมง|เวลาตอนนี้|ดูนาฬิกา|นาฬิกา|เวลาเท่าไหร่|เวลาเท่าไร|บอกเวลา|วันอะไร|วันที่เท่าไหร่|วันที่เท่าไร|วันนี้วันอะไร|time|clock)/i.test(text);
+    if (isClockQuery && !lower.includes('ตั้งปลุก') && !lower.includes('เตือน')) {
+      const now = new Date();
+      const thaiDays = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+      const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+      const dayName = thaiDays[now.getDay()];
+      const dateNum = now.getDate();
+      const monthName = thaiMonths[now.getMonth()];
+      const yearBE = now.getFullYear() + 543;
+      const hours = now.getHours();
+      const mins = now.getMinutes();
+      const timeStr = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')} น.`;
+
+      let periodStr = '';
+      if (hours >= 5 && hours < 11) periodStr = 'ช่วงเช้า';
+      else if (hours >= 11 && hours < 13) periodStr = 'ช่วงเที่ยง';
+      else if (hours >= 13 && hours < 16) periodStr = 'ช่วงบ่าย';
+      else if (hours >= 16 && hours < 19) periodStr = 'ช่วงเย็น';
+      else if (hours >= 19 && hours < 24) periodStr = 'ช่วงค่ำ';
+      else periodStr = 'ช่วงดึก';
+
+      return `ตอนนี้เวลา ${timeStr} (${periodStr}) ${dayName}ที่ ${dateNum} ${monthName} พ.ศ. ${yearBE} ค่ะ ⏰`;
+    }
+
+    // 1. Windows Remote / Native System Control Intent
+    if (/(?:remote\s*ได้จริงไหม|รีโมท\s*ได้จริงไหม|remote\s*ได้ไหม|รีโมท\s*ได้ไหม|remote\s*เครื่องฉัน|รีโมท\s*เครื่องเรา)/i.test(text)) {
+      return `โบ้สามารถ Remote สั่งการระบบบนเครื่องคอมพิวเตอร์ของคุณได้จริงค่ะ! 🖥️✨\n\nสิ่งที่โบ้สั่งการได้บน Windows:\n1. Remote สั่งเปิดเพลง/คลิป/เว็บลิงก์ บนเบราว์เซอร์ของเครื่องโดยตรง ("remote เปิดเพลง...")\n2. สั่งล็อคหน้าจอคอมพิวเตอร์เพื่อความปลอดภัย ("ล็อคหน้าจอ" หรือ "Lock Screen")\n3. สั่งเปิดโปรแกรมระบบ เช่น เครื่องคิดเลข (Calculator), Notepad, หรือ Task Manager\n4. สั่งสลับโหมดหน้าต่างลอยจิ๋ว (Mini Mode)\n5. ส่งแจ้งเตือนระดับ Windows Notification ถึงหน้าจอคุณ\n\n(เป็นการสั่งการระบบในเครื่องของคุณค่ะ ไม่ใช่การรีโมทหน้าจอข้ามเครื่องแบบ AnyDesk นะคะ)`;
+    }
+
+    // Direct Windows Remote Actions
+    if (/(?:ล็อคหน้าจอ|ล็อกหน้าจอ|ล็อคคอม|lock\s*screen)/i.test(text)) {
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.executeSystemAction) {
+        await (window as any).electronAPI.executeSystemAction('lock');
+      }
+      return `ล็อคหน้าจอคอมพิวเตอร์ให้เรียบร้อยแล้วค่ะ 🔒`;
+    }
+
+    if (/(?:เปิดเครื่องคิดเลข|เปิดแคลคูเลเตอร์|open\s*calculator|เปิด\s*calculator)/i.test(text)) {
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.executeSystemAction) {
+        await (window as any).electronAPI.executeSystemAction('calc');
+      }
+      return `เปิดเครื่องคิดเลข (Calculator) ให้เรียบร้อยแล้วค่ะ 🧮`;
+    }
+
+    if (/(?:เปิด\s*notepad|เปิดโน้ตแพด|เปิดสมุดจด)/i.test(text)) {
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.executeSystemAction) {
+        await (window as any).electronAPI.executeSystemAction('notepad');
+      }
+      return `เปิด Notepad ให้เรียบร้อยแล้วค่ะ 📝`;
+    }
+
+    if (/(?:เปิด\s*task\s*manager|เปิดทาสก์เมเนเจอร์)/i.test(text)) {
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.executeSystemAction) {
+        await (window as any).electronAPI.executeSystemAction('taskmgr');
+      }
+      return `เปิด Task Manager ให้เรียบร้อยแล้วค่ะ ⚙️`;
+    }
+
     // Weather tool (Open-Meteo Real-time API: https://open-meteo.com)
     const isWeatherQuery = (
       lower.includes('อากาศ') ||
@@ -725,7 +826,7 @@ export class AIService {
       }
     }
 
-    // 1. Music Control Commands (Stop, Pause, Resume, Next, Volume adjustments)
+    // 2. Music Control Commands (Stop, Pause, Resume, Next, Volume adjustments)
     const musicControl = musicService.isMusicControlIntent(text);
     if (musicControl) {
       if (typeof window !== 'undefined') {
@@ -766,7 +867,7 @@ export class AIService {
       }
     }
 
-    // 2. Music / Audio Stream & YouTube Song Request
+    // 3. Music / Audio Stream & YouTube Song Request
     if (musicService.isMusicIntent(text)) {
       const isRemoteRequest = /(?:remote|รีโมท|ในเครื่อง|บนเครื่อง|ในคอม|บนคอม|เบราว์เซอร์)/i.test(text);
       const songInfo = await musicService.openMusic(text, isRemoteRequest);
@@ -784,19 +885,6 @@ export class AIService {
             updatedAt: new Date().toISOString()
           }
         }));
-
-        // Remote open in Windows default browser
-        if (isRemoteRequest && songInfo.url) {
-          try {
-            if ((window as any).electronAPI?.openExternal) {
-              (window as any).electronAPI.openExternal(songInfo.url);
-            } else {
-              window.open(songInfo.url, '_blank', 'noopener,noreferrer');
-            }
-          } catch (e) {
-            console.warn('[AIService] Failed to remote open in browser:', e);
-          }
-        }
       }
 
       if (isRemoteRequest) {
@@ -806,18 +894,38 @@ export class AIService {
       return `เปิดเพลง "${songInfo.query}" เรียบร้อยแล้วค่ะ 🎵`;
     }
 
-    // Reminders
+    // 4. Memory Save Intent (Explicit Memory Recording)
+    const memorySaveMatch = text.match(/(?:ช่วยจำว่า|จำไว้ว่า|จำไว้นะว่า|จำไว้|จำว่า|บันทึกไว้ว่า|บันทึกว่า|จดไว้ว่า|จดว่า|จำข้อมูลว่า|บันทึกข้อมูลว่า)\s*(.+)/i);
+    if (memorySaveMatch) {
+      const factToSave = memorySaveMatch[1].trim();
+      if (factToSave.length >= 2) {
+        let category: import('../../types').MemoryCategory = 'preference';
+        if (/(?:กิน|ดื่ม|อาหาร|ขนม|กาแฟ|ชา)/i.test(factToSave)) category = 'food';
+        else if (/(?:แพ้|ยา|โรค|ป่วย|หมอ)/i.test(factToSave)) category = 'health';
+        else if (/(?:งาน|เขียนโค้ด|โปรเจกต์|บริษัท|เรียน)/i.test(factToSave)) category = 'work';
+        else if (/(?:ตื่น|นอน|ออกกำลังกาย|วิ่ง)/i.test(factToSave)) category = 'routine';
+        else if (/(?:ชื่อ|เกิด|อายุ|อยู่|บ้าน)/i.test(factToSave)) category = 'personal';
+
+        db.addMemory(factToSave, category, 5, 100, true);
+        return `บันทึกความทรงจำเรียบร้อยแล้วค่ะว่า "${factToSave}" โบ้จดจำไว้ในสมองถาวรแล้วนะคะ 🧠✨`;
+      }
+    }
+
+    // 5. Memory Query / Recall Intent
+    if (/(?:จำอะไรเกี่ยวกับ|จำอะไรได้บ้าง|จำอะไรได้บ้างเกี่ยวกับ|ข้อมูลของฉัน|ประวัติของฉัน|จำข้อมูลฉันได้ไหม|รู้จักเรายังไง|เราชอบอะไร|เราแพ้อะไร|จำเราได้ไหม)/i.test(text)) {
+      const memories = db.getMemories(false).filter(m => m.status !== 'archived');
+      if (memories.length > 0) {
+        const listStr = memories.slice(0, 5).map((m, idx) => `${idx + 1}. ${m.content}`).join('\n');
+        return `โบ้จำเรื่องของคุณได้ดังนี้ค่ะ 🧠:\n${listStr}\n\nอยากให้จำอะไรเพิ่ม สั่งว่า "ช่วยจำว่า..." ได้ตลอดเลยนะคะ`;
+      } else {
+        return `ตอนนี้ยังไม่มีข้อมูลความทรงจำที่บันทึกไว้เลยค่ะ บอกให้โบ้ช่วยจำได้เลยนะคะ เช่น "ช่วยจำว่าเราชอบดื่มชาเขียว" ค่ะ`;
+      }
+    }
+
+    // 6. Reminders
     if (lower.includes('เตือน') || lower.includes('นัด') || lower.includes('reminder')) {
       const newRem = db.addReminder(text.replace(/เตือน|ช่วยเตือน|บันทึก/g, '').trim() || 'รายการเตือนใหม่', 'เร็วๆ นี้');
       return `บันทึกการแจ้งเตือนเรื่อง "${newRem.title}" เรียบร้อยแล้วค่ะ ⏰`;
-    }
-
-    // Memory query
-    if (lower.includes('จำ') || lower.includes('ข้อมูลของฉัน') || lower.includes('ประวัติ')) {
-      const memories = db.getMemories();
-      if (memories.length > 0) {
-        return `จำได้ค่ะ เช่นเรื่อง "${memories[0].content}" ค่ะ`;
-      }
     }
 
     return null;

@@ -531,36 +531,121 @@ export class AudioService {
 
   private currentAudioElement: HTMLAudioElement | null = null;
 
-  // Normalize Thai conversational text for natural, smooth TTS without robotic interruptions
+  // Normalize Thai conversational text for natural, smooth, expressive TTS (Dynamic laughter, phonetics, rhythm)
   public normalizeThaiTtsText(text: string): string {
-    return text
-      // Strip code blocks & markdown
+    if (!text) return '';
+
+    let res = text
+      // 1. Strip code blocks & markdown
       .replace(/```[\s\S]*?```/g, 'ดูโค้ดบนจอได้เลยนะ')
       .replace(/`([^`]+)`/g, '$1')
       .replace(/[*_~#>-]/g, ' ')
-      // Convert weather & measurement units to natural spoken Thai
-      .replace(/(\d+(?:\.\d+)?)\s*°C/g, (_m, n) => `${n} องศา`)
-      .replace(/°C/g, ' องศา')
-      .replace(/(\d+(?:\.\d+)?)\s*km\/h/gi, (_m, n) => `${n} กิโลเมตรต่อชั่วโมง`)
-      .replace(/km\/h/gi, ' กิโลเมตรต่อชั่วโมง')
-      .replace(/(\d+(?:\.\d+)?)\s*%/g, (_m, n) => `${n} เปอร์เซ็นต์`)
-      // Clean parentheses so TTS doesn't say "วงเล็บเปิด...วงเล็บปิด"
+      // 2. Clean parentheses & quotes so TTS doesn't read "วงเล็บเปิด...วงเล็บปิด" or "เครื่องหมายคำพูด"
       .replace(/\(([^)]+)\)/g, ', $1, ')
       .replace(/[()[\]{}"'“”‘’]/g, ' ')
-      // Strip emojis
-      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
-      // Normalize multiple spaces
+      // 3. Strip emojis
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
+
+    // 4. Elongated vowels and repetitive Thai characters (ลากเสียงอย่างมี dynamic)
+    // Reduce excessive ending repetitions (e.g. มากกกกก -> มากกก, จริงงงง -> จริงงง, อ่าาาาา -> อ่าาา) with breathing pause
+    res = res.replace(/([ก-ฮ])\1{2,}/g, '$1$1$1')
+      .replace(/า{3,}/g, 'าาา')
+      .replace(/([ะัำิ-ูเ-ไ])\1{2,}/g, '$1$1')
+      .replace(/(อ่า|เอิ่ม|เอ่อ|อือ|เย้|โอ้|ว้าว)\1+/g, '$1 ');
+
+    // 5. Dynamic Thai Laughter: 5555 -> ฮ่าๆๆ with natural expressiveness
+    // Detect sequences of 5s not followed by numeric measurement units (บาท, คน, ชิ้น, etc.)
+    res = res.replace(/(?<!\d)(5{2,})(?:\+*)(?!\s*(?:บาท|ดอลลาร์|คน|ชิ้น|อัน|ตัว|กิโล|เมตร|วัน|ปี|เดือน|เท่า|พัน|หมื่น|แสน|ล้าน|\d))/g, (_match, fives) => {
+      const len = fives.length;
+      if (len === 2) return 'ฮ่าๆ ';
+      if (len === 3) return 'ฮ่าๆๆ ';
+      if (len <= 5) return 'ฮ่าๆๆๆ ';
+      return 'ฮ่าาาๆๆๆๆ ';
+    });
+
+    // Handle single 55+ or 555+ standalone
+    res = res.replace(/(?<!\d)5{2,}\+/g, 'ฮ่าๆๆๆ ');
+
+    // Normalize repetitive "ฮ่าๆๆๆๆๆๆๆ" to lively dynamic laugh with breath
+    res = res.replace(/(?:ฮ่า\s*){3,}/g, 'ฮ่าๆๆ ')
+      .replace(/ฮ่าๆ{3,}/g, 'ฮ่าๆๆๆ ');
+
+    // 6. Conversational Time & Units in Thai
+    // 14:30 น. or 14:30 -> 14 นาฬิกา 30 นาที
+    res = res.replace(/(\d{1,2}):(\d{2})\s*(?:น\.|น)?/g, (_m, h, min) => `${h} นาฬิกา ${min} นาที`)
+      .replace(/(\d+(?:\.\d+)?)\s*°C/g, (_m, n) => `${n} องศาเซลเซียส`)
+      .replace(/°C/g, ' องศาเซลเซียส')
+      .replace(/(\d+(?:\.\d+)?)\s*km\/h/gi, (_m, n) => `${n} กิโลเมตรต่อชั่วโมง`)
+      .replace(/km\/h/gi, ' กิโลเมตรต่อชั่วโมง')
+      .replace(/(\d+(?:\.\d+)?)\s*%/g, (_m, n) => `${n} เปอร์เซ็นต์`);
+
+    // 7. Tech & English loanwords to Thai Phonetics (อ่านคำศัพท์ได้แม่นยำ ไม่เพี้ยน)
+    const phonetics: Array<[RegExp, string]> = [
+      [/\b(?:Bo AI|bo ai|BoAI|boai)\b/gi, 'โบไอ'],
+      [/\b(?:ChatGPT|chatgpt)\b/gi, 'แชทจีพีที'],
+      [/\b(?:OpenAI|openai)\b/gi, 'โอเพนเอไอ'],
+      [/\b(?:GPT-4o|gpt-4o|GPT4o)\b/gi, 'จีพีทีโฟร์โอ'],
+      [/\b(?:GPT)\b/gi, 'จีพีที'],
+      [/\b(?:Gemini)\b/gi, 'เจมิไน'],
+      [/\b(?:Grok)\b/gi, 'กร็อก'],
+      [/\b(?:Claude)\b/gi, 'โคลด'],
+      [/\b(?:AI|ai)\b/g, 'เอไอ'],
+      [/\b(?:YouTube Music|youtubemusic)\b/gi, 'ยูทูปมิวสิค'],
+      [/\b(?:YouTube|youtube)\b/gi, 'ยูทูป'],
+      [/\b(?:Google)\b/gi, 'กูเกิล'],
+      [/\b(?:Facebook)\b/gi, 'เฟซบุ๊ก'],
+      [/\b(?:WiFi|wifi)\b/gi, 'ไวไฟ'],
+      [/\b(?:App|app)\b/g, 'แอป'],
+      [/\b(?:Online|online)\b/gi, 'ออนไลน์'],
+      [/\b(?:Offline|offline)\b/gi, 'ออฟไลน์'],
+      [/\b(?:Admin|admin)\b/gi, 'แอดมิน'],
+      [/\b(?:Playlist|playlist)\b/gi, 'เพลย์ลิสต์'],
+      [/\b(?:Link|link)\b/gi, 'ลิงก์'],
+      [/\b(?:Update|update)\b/gi, 'อัปเดต'],
+      [/\b(?:ID|id)\b/g, 'ไอดี'],
+      [/\b(?:URL|url)\b/g, 'ยูอาร์แอล'],
+      [/\b(?:PDF|pdf)\b/g, 'พีดีเอฟ'],
+      [/\b(?:MB|mb)\b/g, 'เมกะไบต์'],
+      [/\b(?:GB|gb)\b/g, 'กิกะไบต์'],
+      [/\b(?:KB|kb)\b/g, 'กิโลไบต์'],
+      [/\b(?:ms)\b/g, 'มิลลิวินาที'],
+      [/\b(?:API|api)\b/g, 'เอพีไอ'],
+      [/\b(?:LLM|llm)\b/g, 'แอลแอลเอ็ม'],
+      [/\b(?:Windows|windows)\b/gi, 'วินโดวส์'],
+      [/\b(?:PC|pc)\b/g, 'พีซี'],
+      [/\b(?:Mac|mac)\b/g, 'แมค'],
+      [/\b(?:Bluetooth|bluetooth)\b/gi, 'บลูทูธ'],
+      [/\b(?:Microphone|mic)\b/gi, 'ไมค์'],
+      [/\b(?:Volume|volume)\b/gi, 'วอลลุ่ม'],
+      [/\b(?:Browser|browser)\b/gi, 'เบราว์เซอร์'],
+      [/\b(?:Calculator|calc)\b/gi, 'เครื่องคิดเลข'],
+      [/\b(?:Notepad|notepad)\b/gi, 'โน้ตแพด'],
+      [/\b(?:Task Manager|taskmgr)\b/gi, 'ทาสก์เมเนเจอร์'],
+      [/\b(?:Desktop|desktop)\b/gi, 'เดสก์ท็อป'],
+      [/\b(?:Mini Mode|mini mode)\b/gi, 'มินิโหมด'],
+    ];
+
+    for (const [regex, phonetic] of phonetics) {
+      res = res.replace(regex, phonetic);
+    }
+
+    // 8. Natural Conversational Cadence & Breathing Pauses (จังหวะการพูดไม่กระชั้นชิด)
+    // Insert subtle pause after particles so the voice breathes naturally
+    res = res.replace(/(?<=(?:นะคะ|นะครับ|ค่ะ|ครับ|จ้า|จ๊ะ))\s*(?=[ก-ฮa-zA-Z])/g, ', ')
+      .replace(/(?<=(?:สวัสดีค่ะ|สวัสดีครับ|ยินดีค่ะ|ยินดีครับ|ได้เลยค่ะ|ได้เลยครับ))\s*/g, ', ')
       .replace(/\s+/g, ' ')
       .trim();
+
+    return res;
   }
 
   // Split Thai text into natural conversational chunks without cutting words
-  public splitIntoNaturalThaiChunks(text: string, maxLen = 130): string[] {
+  public splitIntoNaturalThaiChunks(text: string, maxLen = 140): string[] {
     const cleaned = this.normalizeThaiTtsText(text);
     if (!cleaned) return [];
 
-    // Split on breath pauses and conversational boundaries
-    const rawSegments = cleaned.split(/(?<=[.!?\n]|นะแก|แล้วนะ|เลยนะ|จ้า|ครับ|ค่ะ|เลย|แต่|และ)\s+/);
+    // Split on natural breathing pauses and conversational boundaries
+    const rawSegments = cleaned.split(/(?<=[.,!?\n]|นะคะ|นะครับ|แล้วนะ|เลยนะ|จ้า|ครับ|ค่ะ|เลย|แต่|และ)\s+/);
     const chunks: string[] = [];
     let current = '';
 

@@ -190,6 +190,13 @@ export const TrainingStudio: React.FC = () => {
 
     const startTime = performance.now();
     try {
+      // Ensure latest tuning sliders & personality are committed so Test Lab uses them
+      const latestPersonality: PersonalityConfig = {
+        ...personality,
+        tuning,
+      };
+      db.savePersonality(latestPersonality);
+
       const formattedForAI = newMsgs.map((m, idx) => ({
         id: `test_${idx}`,
         conversation_id: 'test',

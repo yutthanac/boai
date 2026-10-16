@@ -31,6 +31,9 @@ interface Window {
     showNotification: (title: string, body: string) => Promise<boolean>;
     sendMediaCommand: (command: string) => Promise<boolean>;
     searchYouTube: (query: string) => Promise<string | null>;
+    fetchTts?: (text: string) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
+    fetchGrokTts?: (params: { text: string; apiKey: string; voice: string }) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
+    executeSystemAction?: (action: string, param?: string) => Promise<{ success: boolean; message: string }>;
     onWakeWordTriggered: (callback: () => void) => void;
     onMiniModeChanged: (callback: (isMini: boolean) => void) => void;
     onToggleMiniModeTrigger: (callback: () => void) => void;
