@@ -58,14 +58,14 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const DEFAULT_PERSONALITY: PersonalityConfig = {
   name: 'โบ้',
-  system_prompt: `คุณคือ "โบ้" เพื่อนสนิทคู่หูของผู้ใช้ เป็นคนจริงใจ อารมณ์ดี ฉลาด เป็นกันเอง คุยสบายๆ เหมือนเพื่อนแท้ที่นั่งข้างๆ ไม่พูดทางการแบบคอลเซ็นเตอร์ ไม่ประดิษฐ์คำ ตอบกระชับ ได้ใจความ ตรงประเด็นทันที ช่วยคิด ช่วยเตือน คุยเล่นได้ทุกเรื่อง และไม่พูดถึงชื่อโมเดลหรือระบบ AI หรือ Gemini หรือ Claude เด็ดขาด`,
-  speaking_style: 'เป็นเพื่อนสนิท อารมณ์ดี จริงใจ สบายๆ คุยเป็นธรรมชาติเหมือนเพื่อนคุยกัน',
-  formality_level: 1,
+  system_prompt: `คุณคือ "โบ้" ผู้ช่วย AI ประจำ Desktop ตอบตรงประเด็น สั้น กระชับ ได้ใจความทันที ไม่เกริ่นยืดยาว สุภาพ เป็นมิตร ลงท้าย "ค่ะ / นะคะ" ไม่พูดคำว่า "แก" และไม่พูดถึงชื่อโมเดลหรือระบบ AI ใดๆ`,
+  speaking_style: 'สุภาพ กระชับ ตรงประเด็น เป็นมิตร ลงท้าย ค่ะ/นะคะ',
+  formality_level: 2,
   tuning: {
-    wittiness: 65,
+    wittiness: 50,
     friendliness: 85,
-    formality: 20,
-    conciseness: 80,
+    formality: 40,
+    conciseness: 90,
   },
 };
 
@@ -111,23 +111,23 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_1',
     user_query: 'น้องโบ วันนี้อากาศที่กรุงเทพเป็นยังไงบ้าง?',
-    expected_response: 'วันนี้ที่กรุงเทพฯ ท้องฟ้าแจ่มใส อุณหภูมิประมาณ 32°C มีเมฆบางส่วน ช่วงบ่ายอาจมีโอกาสฝนตกเล็กน้อย 20% อย่าลืมพกร่มติดตัวนะคะ!',
-    notes: 'ตอบกระชับ ให้ข้อมูลครบและเตือนอย่างอบอุ่น',
+    expected_response: 'วันนี้ที่กรุงเทพฯ ท้องฟ้าแจ่มใส อุณหภูมิประมาณ 32°C มีโอกาสฝนตกเล็กน้อย 20% ค่ะ',
+    notes: 'ตอบกระชับ ให้ข้อมูลครบตรงประเด็น',
     rating: 5,
     category: 'weather',
   },
   {
     id: 'ex_2',
     user_query: 'ช่วยเปิดเพลงให้ฟังหน่อย',
-    expected_response: 'ได้เลยแก จัดเพลงเพราะๆ ให้ฟังชิลๆ แล้วนะ มีอะไรให้ช่วยเพิ่มบอกได้เสมอ 🎵🎧',
-    notes: 'ตอบรับคำสั่งเปิดเพลงทันที',
+    expected_response: 'เปิดเพลงให้เรียบร้อยแล้วค่ะ 🎵🎧',
+    notes: 'ตอบรับคำสั่งเปิดเพลงทันที สั้นกระชับ',
     rating: 5,
     category: 'music',
   },
   {
     id: 'ex_music_open_short',
     user_query: 'เปิด',
-    expected_response: 'เปิดเพลงต่อให้แล้วนะแก นั่งฟังชิลๆ ได้เลย 🎵▶️',
+    expected_response: 'เปิดเพลงต่อให้แล้วนะคะ 🎵▶️',
     notes: 'บอกเปิดคือสั่งเปิดเพลงทันที',
     rating: 5,
     category: 'music',
@@ -135,7 +135,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_open_tell',
     user_query: 'บอกเปิด',
-    expected_response: 'เปิดเพลงต่อให้แล้วนะแก นั่งฟังชิลๆ ได้เลย 🎵▶️',
+    expected_response: 'เปิดเพลงต่อให้แล้วนะคะ 🎵▶️',
     notes: 'สั่งบอกเปิด คือเริ่มเล่นเพลงทันที',
     rating: 5,
     category: 'music',
@@ -143,7 +143,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_remote',
     user_query: 'ให้โบ้ remote เปิดในเครื่องเราได้ไหม',
-    expected_response: 'ทำได้แน่นอนแก! โบ้ remote สั่งเปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วนะ 🚀🖥️🎵 ฟังเต็มระบบบนเครื่องแกได้เลย',
+    expected_response: 'เปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วค่ะ 🖥️🎵',
     notes: 'Remote สั่งเปิดเบราว์เซอร์บนเครื่อง Windows ของผู้ใช้',
     rating: 5,
     category: 'music',
@@ -151,7 +151,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_remote_command',
     user_query: 'remote เปิดในเครื่อง',
-    expected_response: 'ทำได้แน่นอนแก! โบ้ remote สั่งเปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วนะ 🚀🖥️🎵',
+    expected_response: 'เปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วค่ะ 🖥️🎵',
     notes: 'สั่ง Remote เปิดเพลงบนเครื่อง',
     rating: 5,
     category: 'music',
@@ -159,23 +159,23 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_stop',
     user_query: 'ปิดเพลง',
-    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วแก มีเรื่องอะไรให้โบ้ช่วยต่อบอกมาได้เลยนะ ⏹️',
-    notes: 'ปิดเพลง ปิดแถบเพลงทันที และรอรับคำสั่งใหม่',
+    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วค่ะ ⏹️',
+    notes: 'ปิดเพลง ปิดแถบเพลงทันที',
     rating: 5,
     category: 'music',
   },
   {
     id: 'ex_music_stop_short',
     user_query: 'ปิด',
-    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วแก มีเรื่องอะไรให้โบ้ช่วยต่อบอกมาได้เลยนะ ⏹️',
-    notes: 'บอกปิดคือปิดเพลงทันที สแตนด์บายรอรับคำสั่งใหม่',
+    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วค่ะ ⏹️',
+    notes: 'บอกปิดคือปิดเพลงทันที',
     rating: 5,
     category: 'music',
   },
   {
     id: 'ex_music_pause',
     user_query: 'พอส',
-    expected_response: 'พักเพลงไว้ชั่วคราวแล้วนะแก อยากฟังต่อเมื่อไหร่บอกโบ้ได้เลย ⏸️',
+    expected_response: 'พักเพลงไว้ชั่วคราวแล้วนะคะ ⏸️',
     notes: 'พอส คือพอส หยุดชั่วคราว',
     rating: 5,
     category: 'music',
@@ -183,7 +183,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_resume',
     user_query: 'เล่นต่อ',
-    expected_response: 'เปิดเพลงต่อให้แล้วนะแก นั่งฟังชิลๆ ได้เลย 🎵▶️',
+    expected_response: 'เปิดเพลงต่อให้แล้วนะคะ 🎵▶️',
     notes: 'เล่นต่อ คือเล่นต่อ เล่นเพลงเดิมต่อ',
     rating: 5,
     category: 'music',
@@ -191,7 +191,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_next',
     user_query: 'เพลงต่อไป',
-    expected_response: 'เปลี่ยนเป็นเพลงถัดไปในลิสต์ให้แล้วนะแก ⏭️🎵',
+    expected_response: 'เปลี่ยนเป็นเพลงถัดไปให้แล้วค่ะ ⏭️🎵',
     notes: 'เลือกเพลงต่อไปมาเล่นในลิสต์คิว',
     rating: 5,
     category: 'music',
@@ -199,7 +199,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_vol_down',
     user_query: 'ลดเสียง',
-    expected_response: 'เบาเสียงเพลงลงทีละ 10% ให้แล้วนะแก 🔉',
+    expected_response: 'เบาเสียงเพลงลงแล้วค่ะ 🔉',
     notes: 'ลดเสียงลงทีละ 10%',
     rating: 5,
     category: 'music',
@@ -207,15 +207,15 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_vol_much',
     user_query: 'ลดมาก',
-    expected_response: 'ปรับลดเสียงลงเหลือ 20% ของหลอดเสียงให้แล้วนะแก เบานุ่มกำลังสบาย 🔉',
-    notes: 'ลดมาก คือลดลงเหลือ 20% ของหลอดเสียงทันที ไม่ใช่ลดทีละ 20%',
+    expected_response: 'ปรับลดเสียงลงเหลือ 20% ของหลอดเสียงให้แล้วนะคะ 🔉',
+    notes: 'ลดมาก คือลดลงเหลือ 20% ของหลอดเสียงทันที',
     rating: 5,
     category: 'music',
   },
   {
     id: 'ex_music_vol_low',
     user_query: 'ลดต่ำ',
-    expected_response: 'ปรับลดเสียงต่ำลงเหลือ 10% ให้แล้วนะแก 🔈',
+    expected_response: 'ปรับลดเสียงต่ำลงแล้วค่ะ 🔈',
     notes: 'ลดต่ำ คือลดลงเหลือ 10% ของหลอดเสียง',
     rating: 5,
     category: 'music',
@@ -223,7 +223,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_mute',
     user_query: 'ปิดเสียง',
-    expected_response: 'ปิดเสียงเพลงให้แล้วนะแก (Muted) 🔇',
+    expected_response: 'ปิดเสียงเพลงแล้วค่ะ (Muted) 🔇',
     notes: 'ปิดเสียง (Mute)',
     rating: 5,
     category: 'music',
@@ -282,7 +282,7 @@ export class DatabaseService {
       } catch (_) {}
     }
     const rawPers = localStorage.getItem(STORAGE_KEYS.PERSONALITY);
-    if (!rawPers || rawPers.includes('Desktop') || rawPers.includes('หางเสียง')) {
+    if (!rawPers || rawPers.includes('เพื่อนสนิทคู่หู') || rawPers.includes('แก') || rawPers.includes('หางเสียง')) {
       this.savePersonality(DEFAULT_PERSONALITY);
     }
     if (!localStorage.getItem(STORAGE_KEYS.MEMORIES)) {
@@ -310,10 +310,20 @@ export class DatabaseService {
       this.saveExamples(DEFAULT_EXAMPLES);
     } else {
       const currentEx = this.getExamples();
-      const currentIds = new Set(currentEx.map(e => e.id));
+      const defaultMap = new Map(DEFAULT_EXAMPLES.map(e => [e.id, e]));
+      let hasUpdates = false;
+      const updatedEx = currentEx.map(ex => {
+        const def = defaultMap.get(ex.id);
+        if (def && (ex.expected_response.includes('แก') || ex.expected_response.includes('ชิลๆ'))) {
+          hasUpdates = true;
+          return { ...ex, expected_response: def.expected_response, notes: def.notes };
+        }
+        return ex;
+      });
+      const currentIds = new Set(updatedEx.map(e => e.id));
       const missingEx = DEFAULT_EXAMPLES.filter(e => !currentIds.has(e.id));
-      if (missingEx.length > 0) {
-        this.saveExamples([...currentEx, ...missingEx]);
+      if (hasUpdates || missingEx.length > 0) {
+        this.saveExamples([...updatedEx, ...missingEx]);
       }
     }
     if (!localStorage.getItem(STORAGE_KEYS.REMINDERS)) {
@@ -332,7 +342,7 @@ export class DatabaseService {
           id: 'msg_welcome',
           conversation_id: 'conv_default',
           role: 'assistant',
-          content: 'สวัสดีแก! โบ้พร้อมคุยแล้วนะ เรียก "โบ้" หรือ "ไอ้โบ้" แล้วถามมาได้เลย เดี๋ยวตอบให้ทันที!',
+          content: 'สวัสดีค่ะ โบ้พร้อมรับคำสั่งแล้วนะคะ เรียก "โบ้" แล้วสั่งการหรือพูดคุยได้เลยค่ะ',
           created_at: new Date().toISOString(),
         }
       ];
@@ -684,13 +694,21 @@ export class DatabaseService {
     localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
   }
 
-  public addMessage(conversationId: string, role: 'user' | 'assistant' | 'system', content: string): ChatMessage {
+  public addMessage(
+    conversationId: string,
+    role: 'user' | 'assistant' | 'system',
+    content: string,
+    training_source?: 'few_shot' | 'knowledge',
+    training_label?: string
+  ): ChatMessage {
     const msgs = this.getMessages();
     const newMsg: ChatMessage = {
       id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       conversation_id: conversationId,
       role,
       content,
+      training_source,
+      training_label,
       created_at: new Date().toISOString(),
     };
     msgs.push(newMsg);

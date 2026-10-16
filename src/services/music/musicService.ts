@@ -43,92 +43,89 @@ export class MusicService {
   public extractSongQuery(text: string): string {
     let clean = text.trim();
 
-    // Strip common Thai and English conversational prefix/suffix phrases
-    const phrasesToRemove = [
-      /play\s+(?:the\s+)?song/gi,
-      /play\s+(?:the\s+)?music/gi,
-      /play\s+(?:me\s+)?/gi,
-      /in\s+youtube\s+music/gi,
-      /on\s+youtube\s+music/gi,
-      /from\s+youtube\s+music/gi,
-      /youtube\s+music/gi,
-      /song/gi,
-      /music/gi,
-      /ขอเปลี่ยนเพลงเป็น/gi,
-      /ขอเปลี่ยนเพลง/gi,
-      /ขอเปลี่ยนเป็น/gi,
-      /เปลี่ยนเพลงเป็น/gi,
-      /เปลี่ยนเพลง/gi,
-      /เปลี่ยนเป็น/gi,
-      /ช่วยเปิดเพลง/gi,
-      /ช่วยเปิด/gi,
-      /เปิดเพลง/gi,
-      /เล่นเพลง/gi,
-      /ฟังเพลง/gi,
-      /ขอเพลง/gi,
-      /หาเพลง/gi,
-      /ใน\s*youtube\s*music/gi,
-      /บน\s*youtube\s*music/gi,
-      /ใน\s*ยูทูปมิวสิค/gi,
-      /บน\s*ยูทูปมิวสิค/gi,
-      /ใน\s*ยูทูป/gi,
-      /บน\s*ยูทูป/gi,
-      /ยูทูปมิวสิค/gi,
-      /ยูทูป/gi,
-      /ให้ฟังหน่อย/gi,
-      /ให้ฟังที/gi,
-      /ให้หน่อยนะ/gi,
-      /ให้หน่อย/gi,
-      /หน่อยนะ/gi,
-      /หน่อยสิ/gi,
-      /หน่อย/gi,
-      /ทีครับ/gi,
-      /ทีค่ะ/gi,
-      /ทีดิ/gi,
-      /ทีแก/gi,
-      /ที/gi,
-      /remote\s*เปิดในเครื่องเรา/gi,
-      /remote\s*เปิดในเครื่อง/gi,
-      /remote\s*เปิด/gi,
-      /รีโมท\s*เปิดในเครื่อง/gi,
-      /รีโมท\s*เปิด/gi,
-      /remote/gi,
-      /รีโมท/gi,
-      /ในเครื่องเรา/gi,
-      /ในเครื่อง/gi,
-      /บนเครื่อง/gi,
-      /ในคอม/gi,
-      /บนคอม/gi,
-      /บนเบราว์เซอร์/gi,
-      /ในเบราว์เซอร์/gi,
-      /เบราว์เซอร์/gi,
-      /บอกเปิด/gi,
-      /ช่วยเปิด/gi,
-      /เปิดสิ/gi,
-      /เปิดเลย/gi,
-      /เปิดดิ/gi,
-      /ไอ้โบว์/gi,
-      /ไอโบว์/gi,
-      /น้องโบว์/gi,
-      /โบว์/gi,
-      /ไอ้โบ้/gi,
-      /ไอโบ้/gi,
-      /น้องโบ/gi,
-      /บักโบ้/gi,
-      /ไอ้โบ/gi,
-      /ไอโบ/gi,
-      /โบไอ/gi,
-      /โลไอ/gi,
-      /โบ้/gi,
-      /bo ai/gi,
-      /boai/gi,
+    // 1. Initial cleanup of common Thai and English vocatives and playback command prefixes
+    const prefixesToRemove = [
+      /^(?:ไอ้โบว์|ไอโบว์|น้องโบว์|โบว์|ไอ้โบ้|ไอโบ้|น้องโบ|บักโบ้|โบ้|ไอ้โบ|ไอโบ|โบไอ|โลไอ|bo\s*ai|boai)\s*[,.:;]?\s*/gi,
+      /^(?:ช่วย|รบกวน|กรุณา|วาน|บอก)\s*/gi,
+      /^(?:ขอเปลี่ยนเพลงเป็น|ขอเปลี่ยนเพลง|ขอเปลี่ยนเป็น|เปลี่ยนเพลงเป็น|เปลี่ยนเพลง|เปลี่ยนเป็น)\s*/gi,
+      /^(?:ช่วยเปิดเพลง|ช่วยหาเพลง|ช่วยเปิด|เปิดเพลง|เล่นเพลง|ฟังเพลง|ขอเพลง|หาเพลง|เปิดให้ฟังหน่อย|เปิดให้หน่อย|เล่นให้หน่อย|เล่นให้ฟังหน่อย)\s*/gi,
+      /^(?:play\s+(?:the\s+)?song|play\s+(?:the\s+)?music|play\s+(?:me\s+)?|play)\s*/gi,
     ];
 
-    for (const regex of phrasesToRemove) {
+    for (const regex of prefixesToRemove) {
       clean = clean.replace(regex, '').trim();
     }
 
-    clean = clean.replace(/^[-\s,.:;]+|[-\s,.:;]+$/g, '').trim();
+    // 2. Comprehensive Contextual Suffix Stripper (Ordered from longest/most specific to shortest)
+    const suffixesToRemove = [
+      // System & Location context phrases
+      /(?:ในระบบเรานะ|บนระบบเรานะ|ในระบบเรา|บนระบบเรา|ในระบบนะ|บนระบบนะ|ในระบบ|บนระบบ)$/gi,
+      /(?:บนเครื่องเรานะ|ในเครื่องเรานะ|บนเครื่องเรา|ในเครื่องเรา|บนเครื่องนะ|ในเครื่องนะ|บนเครื่อง|ในเครื่อง)$/gi,
+      /(?:บนคอมเรานะ|ในคอมเรานะ|บนคอมเรา|ในคอมเรา|บนคอมนะ|ในคอมนะ|บนคอม|ในคอม)$/gi,
+      /(?:บนเบราว์เซอร์เรานะ|ในเบราว์เซอร์เรานะ|บนเบราว์เซอร์เรา|ในเบราว์เซอร์เรา|บนเบราว์เซอร์|ในเบราว์เซอร์|เบราว์เซอร์)$/gi,
+      /(?:remote\s*เปิดในเครื่องเรา|remote\s*เปิดในเครื่อง|remote\s*เปิด|รีโมท\s*เปิดในเครื่อง|รีโมท\s*เปิด|remote|รีโมท)$/gi,
+
+      // Conversational politeness & request suffixes
+      /(?:ให้เราฟังหน่อยนะ|ให้เราฟังนะ|ให้เราฟังที|ให้ฟังหน่อยนะ|ให้ฟังหน่อยดิ|ให้ฟังหน่อยสิ|ให้ฟังหน่อยครับ|ให้ฟังหน่อยค่ะ|ให้ฟังหน่อย|ให้ฟังนะ|ให้ฟังที)$/gi,
+      /(?:ให้หน่อยดิแก|ให้หน่อยนะแก|ให้หน่อยสิแก|ให้หน่อยนะครับ|ให้หน่อยนะคะ|ให้หน่อยนะจ๊ะ|ให้หน่อยนะ|ให้หน่อยดิ|ให้หน่อยสิ|ให้หน่อยครับ|ให้หน่อยค่ะ|ให้หน่อย)$/gi,
+      /(?:ฟังเพลินๆ หน่อยนะ|ฟังเพลินๆ นะ|ฟังเพลินๆ|ฟังชิลๆ หน่อยนะ|ฟังชิลๆ นะ|ฟังชิลๆ|ชิลๆ หน่อย|เพราะๆ หน่อย)$/gi,
+      /(?:สักเพลงสิแก|สักเพลงนะแก|สักเพลงสิ|สักเพลงนะ|สักเพลง)$/gi,
+      /(?:หน่อยนะแก|หน่อยนะจ๊ะ|หน่อยดิแก|หน่อยนะ|หน่อยดิ|หน่อยสิ|หน่อยครับ|หน่อยค่ะ|หน่อย)$/gi,
+      /(?:ทีครับ|ทีค่ะ|ทีดิ|ทีแก|ทีสิ|ทีนะ|ที)$/gi,
+      /(?:เลยแก|เลยนะ|เลยดิ|เลยสิ|เลย)$/gi,
+      /(?:นะแก|นะจ๊ะ|นะครับ|นะคะ|นะ|ดิแก|ดิ|สิแก|สิ|ครับผม|ครับ|ค่ะ)$/gi,
+
+      // YouTube platform mentions
+      /(?:ใน\s*youtube\s*music|บน\s*youtube\s*music|จาก\s*youtube\s*music|youtube\s*music)$/gi,
+      /(?:ใน\s*ยูทูปมิวสิค|บน\s*ยูทูปมิวสิค|ยูทูปมิวสิค|ใน\s*ยูทูป|บน\s*ยูทูป|ยูทูป|youtube)$/gi,
+      /(?:song|music)$/gi,
+    ];
+
+    // Iteratively strip suffixes from the end of the query
+    let prev = '';
+    while (clean !== prev) {
+      prev = clean;
+      for (const regex of suffixesToRemove) {
+        clean = clean.replace(regex, '').trim();
+      }
+    }
+
+    // 3. Language Boundary & Title Isolation (Thai-English Boundary)
+    // If the title starts with an English title (e.g. "See You Again", "Love Me Like You Do", "Shape of You", "Die With A Smile")
+    // followed by any trailing Thai conversational words that weren't caught above:
+    const englishLeadingMatch = clean.match(/^([a-zA-Z0-9\s'.,!&/()+-]{2,})\s+([\u0E00-\u0E7F\s]+)$/);
+    if (englishLeadingMatch) {
+      const englishTitle = englishLeadingMatch[1].trim();
+      const trailingThai = englishLeadingMatch[2].trim();
+      // If trailing Thai contains common prepositions/verbs/particles, isolate the English title
+      if (/(?:ใน|บน|ให้|หน่อย|ฟัง|ขอ|เปิด|เล่น|ดิ|นะ|ที|เลย|ชิล|เพราะ|เพลง|ระบบ|เครื่อง|คอม|เบราว์เซอร์)/.test(trailingThai)) {
+        clean = englishTitle;
+      }
+    }
+
+    // Also check if entire query is wrapped in quotes
+    clean = clean.replace(/^["'“”‘]+|["'“”’]+$/g, '').trim();
+    // Normalize punctuation at ends
+    clean = clean.replace(/^[-\s,.:;!#?]+|[-\s,.:;!#?]+$/g, '').trim();
+    // Normalize multiple spaces
+    clean = clean.replace(/\s{2,}/g, ' ');
+
+    // 4. Smart Song Search Normalizer (popular spelling fixes)
+    const normalizedLower = clean.toLowerCase();
+    const commonFixes: Record<string, string> = {
+      'see you agian': 'See You Again',
+      'love me like u do': 'Love Me Like You Do',
+      'love me like you': 'Love Me Like You Do',
+      'shape of yu': 'Shape of You',
+      'die with a smlie': 'Die With A Smile',
+      'blinding light': 'Blinding Lights',
+      'bad guys': 'Bad Guy',
+      'lofi chill beat': 'Lofi Chill Beats',
+    };
+
+    if (commonFixes[normalizedLower]) {
+      return commonFixes[normalizedLower];
+    }
 
     // Fallback if user just said "เปิดเพลง" with no specific title
     if (!clean || clean.length < 2) {
@@ -245,21 +242,21 @@ export class MusicService {
       return 'mute';
     }
 
-    // 2. Stop / Close Music completely ("บอกปิด", "ปิด", "ปิดเพลง", "ปิดไปเลย")
+    // 2. Pause / Hold ("พอส คือพอส", "หยุดเพลงแป๊บ", "พักเพลง", "pause")
+    if (
+      /^(?:พอส|พอสเพลง|pause|หยุด|หยุดก่อน|หยุดไว้ก่อน|หยุดแป๊บ|หยุดเพลงแป๊บ|หยุดเพลงไว้ก่อน|หยุดเพลงชั่วคราว|พักเพลง|พักไว้ก่อน|หยุดชั่วคราว)$/i.test(raw) ||
+      /(?:พอสเพลง|พอส|pause|หยุดเพลงแป๊บ|หยุดเพลงไว้ก่อน|หยุดเพลงชั่วคราว|หยุดชั่วคราว|หยุดไว้ก่อน|หยุดแป๊บ|พักเพลง|พักไว้ก่อน|หยุดก่อน)/i.test(raw)
+    ) {
+      return 'pause';
+    }
+
+    // 3. Stop / Close Music completely ("บอกปิด", "ปิด", "ปิดเพลง", "ปิดไปเลย")
     // CRITICAL: Must use (?<![เแ]) so that "เปิดเพลง" (which has 'เ' before 'ป') is NEVER matched as "ปิดเพลง"!
     if (
       /^(?:บอกปิด|บอกปิดเพลง|(?<![เแ])ปิด|(?<![เแ])ปิดเพลง|(?<![เแ])ปิดเลย|(?<![เแ])ปิดไปเลย|(?<![เแ])ปิดเพลงไปเลย|(?<![เแ])ปิดเพลงเลย|หยุดเพลง|เลิกเปิดเพลง|หยุดเปิดเพลง|หยุดเล่นเพลง|เลิกฟังเพลง)(?:ที|หน่อย|ดิ|นะ|สิ)?$/i.test(raw) ||
       /(?:(?<![เแ])ปิดเพลง|หยุดเพลง|เลิกเปิดเพลง|(?<![เแ])ปิดเพลงไปเลย|(?<![เแ])ปิดเพลงเลย|หยุดเปิดเพลง|(?<![เแ])ปิดไปเลย|หยุดเล่นเพลง|เลิกฟังเพลง)(?:ที|หน่อย|ดิ|นะ|สิ)?/i.test(raw)
     ) {
       return 'stop';
-    }
-
-    // 3. Pause / Hold ("พอส คือพอส")
-    if (
-      /^(?:พอส|พอสเพลง|pause|หยุด|หยุดก่อน|หยุดไว้ก่อน|หยุดแป๊บ|พักเพลง|พักไว้ก่อน|หยุดชั่วคราว)$/i.test(raw) ||
-      /(?:พอสเพลง|พอส|pause|หยุดชั่วคราว|หยุดไว้ก่อน|หยุดแป๊บ|พักเพลง|พักไว้ก่อน|หยุดก่อน)/i.test(raw)
-    ) {
-      return 'pause';
     }
 
     // 4. Resume / Play Continued ("เล่นต่อ คือเล่นต่อ", "บอกเปิด", "เปิด")

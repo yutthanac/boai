@@ -115,7 +115,7 @@ export const WindowFrame: React.FC = () => {
         </button>
         <button
           title="ปิด / ย่อลง System Tray"
-          className="p-1.5 text-slate-400 hover:text-white hover:bg-rose-600 rounded transition-colors"
+          className="p-1.5 text-slate-400 hover:text-white rounded transition-colors window-close-btn"
           onClick={() => {
             if ((window as any).electronAPI) {
               (window as any).electronAPI.close();

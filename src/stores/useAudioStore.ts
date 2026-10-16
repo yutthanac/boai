@@ -27,7 +27,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   outputDevices: [],
   selectedInputId: 'default',
   selectedOutputId: 'default',
-  sensitivity: 75,
+  sensitivity: 85,
   micLevel: 0,
   isTestingMic: false,
   isTestingSpeaker: false,
@@ -42,7 +42,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       outputDevices: outputs,
       selectedInputId: settings.input_device_id || 'default',
       selectedOutputId: settings.output_device_id || 'default',
-      sensitivity: settings.sensitivity || 75,
+      sensitivity: settings.sensitivity || 85,
     });
   },
 

@@ -30,8 +30,8 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Outfit', 'Prompt', 'Kanit', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+        sans: ['"Noto Sans Thai"', '"Noto Sans"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"Noto Sans Thai"', 'monospace']
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',

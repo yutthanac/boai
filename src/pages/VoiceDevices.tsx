@@ -296,7 +296,7 @@ export const VoiceDevices: React.FC = () => {
 
             <button
               onClick={handleSaveWakeWords}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-medium text-xs shadow-md transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-md transition-all flex items-center justify-center gap-2"
             >
               <Check className="w-3.5 h-3.5" />
               บันทึกการตั้งค่าคำเรียกเสียง

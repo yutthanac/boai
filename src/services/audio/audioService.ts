@@ -20,6 +20,7 @@ export class AudioService {
   private currentWakeWord = 'โบ้';
   private alternateWakeWords: string[] = ['ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'Bo AI', 'โบไอ'];
   private sensitivity = 75; // 0-100
+  private preAmpStream: MediaStream | null = null;
 
   private constructor() {
     this.initSpeechRecognition();
@@ -36,8 +37,23 @@ export class AudioService {
     this.currentWakeWord = primary.toLowerCase().trim();
     const alts = [...alternates];
     
-    // Auto add common Thai phonetic/spelling variants for "โบ้"
-    alts.push('โบ', 'โบ้', 'โบว์', 'bo', 'beau', 'ไอ้โบ้', 'น้องโบ้', 'ไอโบ้', 'บักโบ้');
+    // Auto add comprehensive natural Thai greetings, tone variants, and phonetic forms
+    alts.push(
+      'โบ', 'โบ้', 'โบว์', 'โบ้ะ', 'โบบ',
+      'ไอ้โบ้', 'ไอโบ้', 'ไอ้โบ', 'ไอโบ',
+      'น้องโบ้', 'น้องโบ',
+      'พี่โบ้', 'พี่โบ',
+      'น้าโบ้', 'น้าโบ',
+      'บักโบ้', 'บักโบ',
+      'คุณโบ้', 'คุณโบ',
+      'เจ้าโบ้', 'เจ้าโบ',
+      'เฮ้ยโบ้', 'เฮ้ยโบ', 'เฮ้โบ้', 'เฮ้โบ',
+      'ฮัลโหลโบ้', 'ฮัลโหลโบ',
+      'โบ้ครับ', 'โบ้ค่ะ', 'โบ้คะ', 'โบ้จ๋า', 'โบ้เอ้ย', 'โบ้เอย',
+      'โบวี่', 'โบตั๋น',
+      'bo', 'beau', 'bow', 'bobo', 'boy', 'boe', 'boo',
+      'hey bo', 'hi bo', 'hello bo', 'ok bo', 'yo bo'
+    );
     
     this.alternateWakeWords = Array.from(new Set(alts.map(w => w.toLowerCase().trim()).filter(Boolean)));
     this.sensitivity = sensitivity;
@@ -54,6 +70,82 @@ export class AudioService {
           } catch (_) {}
         }
       }, 100);
+    }
+  }
+
+  // Strip Thai tone marks (mai ek, mai tho, mai tri, mai chattawa, garan) for normalized soft-voice matching
+  public stripThaiToneMarks(text: string): string {
+    return text.replace(/[\u0E48-\u0E4E]/g, '');
+  }
+
+  // Smart soft-voice wake word matching with acoustic confusion tolerance
+  public checkWakeWordMatch(rawPhrase: string): { matched: boolean; matchedWord: string } {
+    if (!rawPhrase || !rawPhrase.trim()) return { matched: false, matchedWord: '' };
+    const raw = rawPhrase.trim().toLowerCase();
+    const stripped = this.stripThaiToneMarks(raw);
+
+    // Guard against common Thai non-name words starting with โ-บ- (e.g. โบราณ, โบสถ์, โบกมือ)
+    const nonWakeWordsRegex = /(?:โบราณ|โบสถ์|โบกมือ|โบก|โบรก|โบว์ลิ่ง)/i;
+    if (nonWakeWordsRegex.test(raw) && !raw.includes('ไอ้โบ้') && !raw.includes('น้องโบ') && !raw.includes('บักโบ้') && !raw.includes('พี่โบ้')) {
+      return { matched: false, matchedWord: '' };
+    }
+
+    const wordsToMatch = [this.currentWakeWord, ...this.alternateWakeWords]
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+
+    // 1. Direct match on full transcript and tone-stripped transcript
+    for (const w of wordsToMatch) {
+      const wLower = w.toLowerCase();
+      if (raw.includes(wLower)) {
+        if (wLower === 'โบ' && /(?:โบราณ|โบสถ์|โบก)/i.test(raw)) continue;
+        return { matched: true, matchedWord: w };
+      }
+      const wStripped = this.stripThaiToneMarks(wLower);
+      if (stripped.includes(wStripped)) {
+        if (wStripped === 'โบ' && /(?:โบราณ|โบสถ์|โบก)/i.test(stripped)) continue;
+        return { matched: true, matchedWord: w };
+      }
+    }
+
+    // 2. High sensitivity regex matching (sensitivity >= 50)
+    if (this.sensitivity >= 50) {
+      const conversationalBoRegex = /(?:ไอ้|ไอ|น้อง|พี่|น้า|บัก|คุณ|เฮ้ย|เฮ้|ฮัลโหล|เจ้า|ฮัลโล)?\s*(?:โ[บพ][้่๊๋์]?|โบว์|โบวี่|โบตั๋น|bo|beau|bow|bobo|boy|boe|boo)(?:$|\s|[ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย|วัน|ตอน])/i;
+      if (conversationalBoRegex.test(raw) || conversationalBoRegex.test(stripped)) {
+        const match = raw.match(conversationalBoRegex) || stripped.match(conversationalBoRegex);
+        return { matched: true, matchedWord: match ? match[0].trim() : 'โบ้' };
+      }
+    }
+
+    // 3. Ultra sensitivity soft-voice & whisper acoustic confusion (sensitivity >= 70)
+    // When whispering or speaking softly from a distance, Thai STT frequently mis-transcribes "โบ้" as:
+    // "โด้", "โม้", "โก้", "โอ้", "โม่", "บู่", "บอส", "บ๊อบ", "บ๊วย", "โบ้ะ"
+    if (this.sensitivity >= 70) {
+      const whisperRegex = /^(?:ไอ้|น้อง|บัก|เฮ้|เฮ้ย)?\s*(?:โ[ด้ม้ก้อ้ม่ผ่]|บู่|บอส|บ๊อบ|บ๊วย|โบ้ะ|โป๊ะ)\s*(?:ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย)?/i;
+      if (whisperRegex.test(raw)) {
+        const match = raw.match(whisperRegex);
+        return { matched: true, matchedWord: match ? match[0].trim() : 'โบ้' };
+      }
+    }
+
+    return { matched: false, matchedWord: '' };
+  }
+
+  // Ensures OS/Chromium enables hardware Auto-Gain Control (AGC) for whisper/soft voice boost
+  private async ensureMicrophonePreAmp(): Promise<void> {
+    if (this.preAmpStream && this.preAmpStream.active) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        this.preAmpStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            autoGainControl: true, // Forces Windows & Chromium audio stack to boost soft / quiet input!
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
+      }
+    } catch (_) {
+      // Graceful fallback if mic is already captured
     }
   }
 
@@ -177,6 +269,7 @@ export class AudioService {
       this.recognition = new SpeechRec();
       this.recognition.continuous = true;
       this.recognition.interimResults = true;
+      this.recognition.maxAlternatives = 5; // Return top 5 phonetic candidates for maximum soft voice sensitivity
       this.recognition.lang = 'th-TH';
 
       this.recognition.onresult = (event: any) => {
@@ -187,34 +280,39 @@ export class AudioService {
           .filter(Boolean)
           .sort((a, b) => b.length - a.length); // Longest first to avoid partial prefix collisions
 
-        // STATE 1: Waiting for wake word (e.g. "ไอ้โบ้", "โบ้", "น้องโบ")
+        // STATE 1: Waiting for wake word (e.g. "ไอ้โบ้", "โบ้", "น้องโบ", whisper variants)
         if (this.voiceSessionState === 'listening_wake' || this.voiceSessionState === 'idle') {
           for (let i = event.resultIndex; i < event.results.length; i++) {
-            const rawPhrase = (event.results[i][0]?.transcript || '').trim();
-            if (!rawPhrase) continue;
-            const phraseLower = rawPhrase.toLowerCase();
+            const resItem = event.results[i];
+            if (!resItem) continue;
 
-            const matchedWord = wordsToMatch.find(w => phraseLower.includes(w.toLowerCase()));
-            if (matchedWord) {
-              console.log('[Bo AI Wake Word Heard]:', rawPhrase, '| Matched:', matchedWord);
-              this.commandStartResultIndex = i;
-              this.voiceSessionState = 'capturing_command';
-              this.playChime('wake');
-              this.wakeWordCallbacks.forEach(cb => cb());
+            // Check across all candidate alternatives (up to 5) for soft / quiet speech detection
+            for (let j = 0; j < resItem.length; j++) {
+              const rawPhrase = (resItem[j]?.transcript || '').trim();
+              if (!rawPhrase) continue;
 
-              // Extract any trailing command spoken in the same breath
-              const pos = phraseLower.indexOf(matchedWord.toLowerCase());
-              let trailing = '';
-              if (pos !== -1) {
-                trailing = rawPhrase.slice(pos + matchedWord.length).trim();
+              const { matched, matchedWord } = this.checkWakeWordMatch(rawPhrase);
+              if (matched) {
+                console.log('[Bo AI Wake Word Heard]:', rawPhrase, '| Matched:', matchedWord, `(candidate #${j})`);
+                this.commandStartResultIndex = i;
+                this.voiceSessionState = 'capturing_command';
+                this.playChime('wake');
+                this.wakeWordCallbacks.forEach(cb => cb());
+
+                // Extract any trailing command spoken in the same breath
+                const pos = rawPhrase.toLowerCase().indexOf(matchedWord.toLowerCase());
+                let trailing = '';
+                if (pos !== -1) {
+                  trailing = rawPhrase.slice(pos + matchedWord.length).trim();
+                }
+                this.currentCapturedTranscript = trailing;
+                if (trailing) {
+                  this.interimSpeechCallbacks.forEach(cb => cb(trailing));
+                }
+
+                this.resetSilenceTimer();
+                return;
               }
-              this.currentCapturedTranscript = trailing;
-              if (trailing) {
-                this.interimSpeechCallbacks.forEach(cb => cb(trailing));
-              }
-
-              this.resetSilenceTimer();
-              return;
             }
           }
         }
@@ -262,8 +360,17 @@ export class AudioService {
               if (this.isListeningForWakeWord && this.voiceSessionState !== 'speaking') {
                 this.recognition.start();
               }
-            } catch (_) {}
-          }, 150);
+            } catch (_) {
+              // Resilient retry in 300ms if engine was in transitional state
+              setTimeout(() => {
+                try {
+                  if (this.isListeningForWakeWord && this.voiceSessionState !== 'speaking') {
+                    this.recognition.start();
+                  }
+                } catch (__) {}
+              }, 300);
+            }
+          }, 100);
         }
       };
     }
@@ -326,9 +433,10 @@ export class AudioService {
     this.commandCapturedCallbacks.forEach(cb => cb(command));
   }
 
-  public startWakeWordDetection() {
+  public async startWakeWordDetection() {
     this.isListeningForWakeWord = true;
     this.voiceSessionState = 'listening_wake';
+    await this.ensureMicrophonePreAmp();
     if (this.recognition) {
       try {
         this.recognition.start();
@@ -341,6 +449,10 @@ export class AudioService {
     this.voiceSessionState = 'idle';
     if (this.commandSilenceTimer) clearTimeout(this.commandSilenceTimer);
     if (this.commandMaxTimer) clearTimeout(this.commandMaxTimer);
+    if (this.preAmpStream) {
+      this.preAmpStream.getTracks().forEach(t => t.stop());
+      this.preAmpStream = null;
+    }
     if (this.recognition) {
       try {
         this.recognition.stop();
@@ -645,19 +757,73 @@ export class AudioService {
   ): Promise<void> {
     this.stopSpeaking();
 
-    const response = await fetch('https://api.x.ai/v1/audio/speech', {
+    // 1. Primary: Native Electron IPC Proxy (bypasses browser CORS & supports official xAI TTS endpoint)
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.fetchGrokTts) {
+      try {
+        const res = await (window as any).electronAPI.fetchGrokTts({
+          text,
+          apiKey,
+          voice: voice || 'leo',
+        });
+
+        if (res?.success && res.dataUrl) {
+          return new Promise((resolve) => {
+            const audio = new Audio(res.dataUrl);
+            audio.playbackRate = Math.max(0.5, Math.min(2.0, speed || 1.0));
+            this.currentAudioElement = audio;
+
+            audio.onended = () => {
+              this.currentAudioElement = null;
+              resolve();
+            };
+            audio.onerror = (e) => {
+              console.warn('Grok IPC audio playback error:', e);
+              this.currentAudioElement = null;
+              resolve();
+            };
+            audio.play().catch((e) => {
+              console.warn('Audio play error:', e);
+              resolve();
+            });
+          });
+        } else if (res?.error) {
+          console.warn('[AudioService] fetchGrokTts IPC reported error:', res.error);
+        }
+      } catch (ipcErr) {
+        console.warn('[AudioService] fetchGrokTts IPC fallback to direct fetch:', ipcErr);
+      }
+    }
+
+    // 2. Secondary: Direct Web Fetch via official xAI TTS endpoint https://api.x.ai/v1/tts
+    let response = await fetch('https://api.x.ai/v1/tts', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'xai.grok-tts',
-        input: text,
+        text,
         voice: voice || 'leo',
-        speed: Math.max(0.5, Math.min(2.0, speed || 1.0)),
+        language: 'auto',
       }),
     });
+
+    // 3. Fallback to OpenAI-compatible endpoint if /v1/tts returns 404
+    if (!response.ok && response.status === 404) {
+      response = await fetch('https://api.x.ai/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'tts-1',
+          input: text,
+          voice: voice || 'leo',
+          speed: Math.max(0.5, Math.min(2.0, speed || 1.0)),
+        }),
+      });
+    }
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -667,6 +833,7 @@ export class AudioService {
     const blob = await response.blob();
     const audioUrl = URL.createObjectURL(blob);
     const audio = new Audio(audioUrl);
+    audio.playbackRate = Math.max(0.5, Math.min(2.0, speed || 1.0));
     this.currentAudioElement = audio;
 
     return new Promise((resolve) => {

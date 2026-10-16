@@ -696,7 +696,7 @@ export const Settings: React.FC = () => {
                   <div className="flex justify-between items-center text-xs">
                     <label className="font-medium text-slate-200">เลือกเสียง Grok (xAI Voice)</label>
                     <span className="text-[10px] text-purple-400 font-mono">
-                      xai.grok-tts
+                      xAI /v1/tts
                     </span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
@@ -725,7 +725,7 @@ export const Settings: React.FC = () => {
                 </div>
 
                 <p className="text-[10px] text-slate-400">
-                  * จะใช้ xAI Grok API Key ที่ระบุในกล่อง xAI Grok ด้านซ้ายเพื่อดึงเสียงแท้จาก xAI
+                  * จะใช้ xAI Grok API Key ที่ระบุในกล่อง xAI Grok ด้านซ้ายเพื่อดึงเสียงแท้จาก xAI (รองรับเสียงแท้จากเซิร์ฟเวอร์ xAI ตรง หากพูดไทยจะเป็นสไตล์อินเตอร์ของ Grok)
                 </p>
               </div>
             )}

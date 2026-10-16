@@ -27,49 +27,49 @@ interface CacheEntry {
 export function interpretWmoCode(code: number): { condition: string; emoji: string; advice: string } {
   switch (code) {
     case 0:
-      return { condition: 'ท้องฟ้าแจ่มใส แดดดี', emoji: '☀️', advice: 'ฟ้าโปร่งมากแก อากาศกำลังดี ออกไปทำกิจกรรมหรือตากผ้าได้สบายเลย' };
+      return { condition: 'ท้องฟ้าแจ่มใส แดดดี', emoji: '☀️', advice: 'ท้องฟ้าโปร่ง อากาศดีค่ะ' };
     case 1:
-      return { condition: 'ท้องฟ้าโปร่งเป็นส่วนใหญ่', emoji: '🌤️', advice: 'แดดร่มลมตกกำลังดี อากาศแจ่มใส ชิลๆ เลยแก' };
+      return { condition: 'ท้องฟ้าโปร่งเป็นส่วนใหญ่', emoji: '🌤️', advice: 'แดดร่มลมตก อากาศแจ่มใสค่ะ' };
     case 2:
-      return { condition: 'มีเมฆบางส่วน', emoji: '⛅', advice: 'มีเมฆบังแดดให้บางช่วง ไม่ร้อนจนเกินไป กำลังสบาย' };
+      return { condition: 'มีเมฆบางส่วน', emoji: '⛅', advice: 'มีเมฆบังแดด อากาศกำลังสบายค่ะ' };
     case 3:
-      return { condition: 'เมฆครึ้มหนาแน่น', emoji: '☁️', advice: 'ฟ้าครึ้มเมฆเยอะหน่อย แดดไม่แรง' };
+      return { condition: 'เมฆครึ้มหนาแน่น', emoji: '☁️', advice: 'ฟ้าครึ้ม เมฆค่อนข้างหนาแน่นค่ะ' };
     case 45:
     case 48:
-      return { condition: 'มีหมอกหนา', emoji: '🌫️', advice: 'ทัศนวิสัยลดลง ถ้าต้องเดินทางขับรถอย่าลืมเปิดไฟหน้าระวังด้วยนะแก' };
+      return { condition: 'มีหมอกหนา', emoji: '🌫️', advice: 'ทัศนวิสัยลดลง หากเดินทางระมัดระวังด้วยนะคะ' };
     case 51:
-      return { condition: 'ฝนตกปรอยๆ เบาๆ', emoji: '🌦️', advice: 'มีละอองฝนตกปรอยๆ ถ้าจะออกไปไหนพกร่มไว้หน่อยนะแก เดี๋ยวผมเปียก' };
+      return { condition: 'ฝนตกปรอยๆ เบาๆ', emoji: '🌦️', advice: 'มีละอองฝนเบาๆ พกร่มไว้ด้วยนะคะ' };
     case 53:
     case 55:
-      return { condition: 'ฝนตกปรอยๆ ปานกลาง', emoji: '🌦️', advice: 'ฝนตกปรอยๆ ต่อเนื่อง พกร่มติดตัวไปด้วยนะแก' };
+      return { condition: 'ฝนตกปรอยๆ ปานกลาง', emoji: '🌦️', advice: 'ฝนตกปรอยๆ แนะนำพกร่มติดตัวนะคะ' };
     case 56:
     case 57:
-      return { condition: 'ฝนละอองเย็นจัด', emoji: '🌧️', advice: 'ฝนตกแถมลมเย็น อย่าลืมใส่เสื้อคลุมด้วยนะแก' };
+      return { condition: 'ฝนละอองเย็นจัด', emoji: '🌧️', advice: 'ฝนตกและอากาศเย็น พกเสื้อคลุมด้วยนะคะ' };
     case 61:
-      return { condition: 'ฝนตกเล็กน้อย', emoji: '🌧️', advice: 'มีฝนตกเบาๆ พกร่มกันฝนไว้ด้วยนะแก' };
+      return { condition: 'ฝนตกเล็กน้อย', emoji: '🌧️', advice: 'มีฝนตกเล็กน้อย พกร่มกันฝนด้วยนะคะ' };
     case 63:
-      return { condition: 'ฝนตกปานกลาง', emoji: '🌧️', advice: 'ฝนตกพอสมควรเลย หลบฝนในร่มก่อน หรือกางร่มให้ดีนะ' };
+      return { condition: 'ฝนตกปานกลาง', emoji: '🌧️', advice: 'ฝนตกปานกลาง กางร่มหรือหลบฝนก่อนนะคะ' };
     case 65:
-      return { condition: 'ฝนตกหนัก', emoji: '🌧️⛈️', advice: 'ฝนเทกระหน่ำเลยแก! ระวังถนนลื่น น้ำขัง เดินทางปลอดภัยนะ' };
+      return { condition: 'ฝนตกหนัก', emoji: '🌧️⛈️', advice: 'ฝนตกหนัก ระวังถนนลื่นและเดินทางปลอดภัยนะคะ' };
     case 66:
     case 67:
-      return { condition: 'ฝนตกเย็นจัด', emoji: '🌧️❄️', advice: 'ฝนตกหนาวเหน็บ รักษาร่างกายให้อบอุ่นด้วยนะ' };
+      return { condition: 'ฝนตกเย็นจัด', emoji: '🌧️❄️', advice: 'ฝนตกอากาศหนาว รักษาร่างกายให้อบอุ่นนะคะ' };
     case 71:
     case 73:
     case 75:
-      return { condition: 'หิมะตก', emoji: '❄️', advice: 'หิมะโปรยปราย หนาวมาก ใส่เสื้อหนาๆ ดื่มอะไรร้อนๆ นะ' };
+      return { condition: 'หิมะตก', emoji: '❄️', advice: 'หิมะตก อากาศหนาวมาก สวมเสื้อหนาๆ นะคะ' };
     case 80:
     case 81:
-      return { condition: 'ฝนซู่ตกเป็นระลอก', emoji: '🌦️', advice: 'ฝนตกเป็นพักๆ เหมือนฝนไล่ช้าง พกร่มไว้ให้อุ่นใจนะแก' };
+      return { condition: 'ฝนซู่ตกเป็นระลอก', emoji: '🌦️', advice: 'ฝนตกเป็นพักๆ พกร่มติดตัวไว้นะคะ' };
     case 82:
-      return { condition: 'ฝนตกซู่กระหน่ำ', emoji: '⛈️', advice: 'ฝนตกแรงมาก ระวังเปียกและหาที่หลบฝนก่อนนะแก' };
+      return { condition: 'ฝนตกซู่กระหน่ำ', emoji: '⛈️', advice: 'ฝนตกแรง ระวังเปียกและหาที่หลบฝนนะคะ' };
     case 95:
-      return { condition: 'พายุฝนฟ้าคะนอง', emoji: '⛈️⚡', advice: 'ฟ้าร้องฟ้าผ่าแรง อย่าอยู่ใต้ต้นไม้ใหญ่หรือที่โล่งแจ้งนะแก ปลอดภัยไว้ก่อน!' };
+      return { condition: 'พายุฝนฟ้าคะนอง', emoji: '⛈️⚡', advice: 'มีฟ้าคะนอง แนะนำหลบในอาคารที่ปลอดภัยนะคะ' };
     case 96:
     case 99:
-      return { condition: 'พายุฝนฟ้าคะนอง มีลูกเห็บตก', emoji: '⛈️🧊', advice: 'พายุแรงและมีลูกเห็บตก หลบในอาคารที่มั่นคงนะแก!' };
+      return { condition: 'พายุฝนฟ้าคะนอง มีลูกเห็บตก', emoji: '⛈️🧊', advice: 'พายุรุนแรงและมีลูกเห็บ หลบในที่ร่มปลอดภัยนะคะ' };
     default:
-      return { condition: 'สภาพอากาศทั่วไป', emoji: '🌤️', advice: 'อย่าลืมดื่มน้ำเยอะๆ และดูแลสุขภาพด้วยนะแก' };
+      return { condition: 'สภาพอากาศทั่วไป', emoji: '🌤️', advice: 'ดูแลสุขภาพด้วยนะคะ' };
   }
 }
 
@@ -208,11 +208,11 @@ export class WeatherService {
   private defaultLon: number;
 
   private constructor() {
-    this.baseUrl = import.meta.env.VITE_OPEN_METEO_BASE_URL || 'https://api.open-meteo.com/v1';
-    this.geoUrl = import.meta.env.VITE_OPEN_METEO_GEO_URL || 'https://geocoding-api.open-meteo.com/v1';
-    this.defaultCity = import.meta.env.VITE_DEFAULT_CITY || 'กรุงเทพมหานคร';
-    this.defaultLat = parseFloat(import.meta.env.VITE_DEFAULT_LATITUDE || '13.7563');
-    this.defaultLon = parseFloat(import.meta.env.VITE_DEFAULT_LONGITUDE || '100.5018');
+    this.baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_OPEN_METEO_BASE_URL) || 'https://api.open-meteo.com/v1';
+    this.geoUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_OPEN_METEO_GEO_URL) || 'https://geocoding-api.open-meteo.com/v1';
+    this.defaultCity = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEFAULT_CITY) || 'กรุงเทพมหานคร';
+    this.defaultLat = parseFloat((typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEFAULT_LATITUDE) || '13.7563');
+    this.defaultLon = parseFloat((typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEFAULT_LONGITUDE) || '100.5018');
   }
 
   public static getInstance(): WeatherService {
@@ -402,7 +402,7 @@ export class WeatherService {
 
     const weather = await this.getWeather(lat, lon, targetCity, dayOffset);
     if (!weather) {
-      return `ขอโทษทีนะแก ตอนนี้โบ้ดึงข้อมูลสภาพอากาศของ ${targetCity} ไม่สำเร็จ สัญญาณเน็ตสะดุด ลองถามใหม่อีกทีนะ`;
+      return `ขออภัยค่ะ ตอนนี้ไม่สามารถดึงข้อมูลสภาพอากาศของ ${targetCity} ได้ ลองถามใหม่อีกครั้งนะคะ`;
     }
 
     const cityName = weather.city;
@@ -415,18 +415,16 @@ export class WeatherService {
       const max = weather.tempMax ?? weather.temperature;
       const min = weather.tempMin ?? (weather.temperature - 6);
       const rain = weather.rainProbability ?? 0;
-      const wind = weather.windSpeed;
 
-      return `พยากรณ์อากาศ${timeLabel}ที่ ${cityName} ${emoji} ${cond} อุณหภูมิสูงสุดประมาณ ${max}°C ต่ำสุด ${min}°C โอกาสฝนตก ${rain}% ลมพัดแรงสุด ${wind} km/h นะแก ${advice}`;
+      return `พยากรณ์อากาศ${timeLabel}ที่ ${cityName} ${emoji} ${cond} อุณหภูมิสูงสุด ${max}°C ต่ำสุด ${min}°C โอกาสฝนตก ${rain}% ค่ะ ${advice}`;
     }
 
     // Current Live Weather Response
     const temp = weather.temperature;
     const feel = weather.apparentTemperature;
     const humidity = weather.humidity;
-    const wind = weather.windSpeed;
 
-    return `ตอนนี้สภาพอากาศที่ ${cityName} ${emoji} ${cond} อุณหภูมิประมาณ ${temp}°C (รู้สึกเหมือน ${feel}°C) ความชื้น ${humidity}% ลมพัด ${wind} km/h นะแก ${advice}`;
+    return `สภาพอากาศที่ ${cityName} ตอนนี้ ${emoji} ${cond} อุณหภูมิ ${temp}°C (รู้สึกเหมือน ${feel}°C) ความชื้น ${humidity}% ค่ะ ${advice}`;
   }
 }
 

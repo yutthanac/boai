@@ -112,6 +112,8 @@ export interface ChatMessage {
   created_at: string;
   tokens?: number;
   pending_memory?: MemoryPendingAction;
+  training_source?: 'few_shot' | 'knowledge';
+  training_label?: string;
 }
 
 export interface Conversation {

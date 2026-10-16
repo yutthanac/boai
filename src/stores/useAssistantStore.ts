@@ -88,6 +88,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
     if (typeof window !== 'undefined') {
       localStorage.setItem('bo_theme', theme);
       document.documentElement.classList.toggle('light', theme === 'light');
+      document.documentElement.classList.toggle('dark', theme === 'dark');
       document.documentElement.setAttribute('data-theme', theme);
     }
     const settings = db.getSettings();
@@ -450,8 +451,15 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
 
     // 3. Fetch AI Response
     try {
-      const replyText = await aiService.chat(currentMsgs);
-      const assistantMsg = db.addMessage(activeConversationId, 'assistant', replyText);
+      const chatResp = await aiService.chatDetailed(currentMsgs);
+      const replyText = chatResp.content;
+      const assistantMsg = db.addMessage(
+        activeConversationId,
+        'assistant',
+        replyText,
+        chatResp.training_source,
+        chatResp.training_label
+      );
 
       set({
         messages: [...currentMsgs, assistantMsg],
@@ -468,7 +476,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
       const settings = db.getSettings();
       await audioService.speak(replyText, settings.tts_rate, settings.tts_pitch);
     } catch (e: any) {
-      const errMsg = db.addMessage(activeConversationId, 'assistant', 'ขอโทษทีนะแก เกิดข้อผิดพลาดนิดหน่อย ลองถามใหม่อีกทีนะ');
+      const errMsg = db.addMessage(activeConversationId, 'assistant', 'ขออภัยค่ะ เกิดข้อผิดพลาดชั่วคราว ลองถามใหม่อีกครั้งนะคะ');
       set({ messages: [...currentMsgs, errMsg] });
     } finally {
       const settings = db.getSettings();

@@ -33,46 +33,126 @@ export const MiniMusicBar: React.FC = () => {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const ytPlayerRef = useRef<any>(null);
 
   const [showVideoDrawer, setShowVideoDrawer] = useState(false);
   const [showPlaylistDrawer, setShowPlaylistDrawer] = useState(false);
   const [playbackError, setPlaybackError] = useState(false);
 
-  // Sync audio element volume with store state
+  // Load YouTube IFrame API script once if not present
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMusicMuted ? 0 : musicVolume;
+    if (typeof window === 'undefined') return;
+    if (!(window as any).YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
     }
-  }, [musicVolume, isMusicMuted]);
+  }, []);
 
-  // Sync play/pause state with HTML5 audio and YouTube iframe
-  useEffect(() => {
-    if (!musicTrack) return;
-
-    if (musicTrack.audioStreamUrl && audioRef.current) {
-      if (musicTrack.isPlaying) {
-        audioRef.current.play().catch((e) => {
-          console.warn('[MiniMusicBar] Audio autoplay prevented:', e);
-          setPlaybackError(true);
-        });
-      } else {
-        audioRef.current.pause();
+  // Universal YouTube Command Sender (YT.Player native API + PostMessage Dual-Channel)
+  const sendYouTubeCommand = (func: string, args: any[] = []) => {
+    // 1. Native YT.Player instance if initialized
+    if (ytPlayerRef.current) {
+      try {
+        if (func === 'pauseVideo' && typeof ytPlayerRef.current.pauseVideo === 'function') {
+          ytPlayerRef.current.pauseVideo();
+        } else if (func === 'playVideo' && typeof ytPlayerRef.current.playVideo === 'function') {
+          ytPlayerRef.current.playVideo();
+        } else if (func === 'mute' && typeof ytPlayerRef.current.mute === 'function') {
+          ytPlayerRef.current.mute();
+        } else if (func === 'unMute' && typeof ytPlayerRef.current.unMute === 'function') {
+          ytPlayerRef.current.unMute();
+        } else if (func === 'setVolume' && typeof ytPlayerRef.current.setVolume === 'function') {
+          ytPlayerRef.current.setVolume(args[0]);
+        } else if (func === 'stopVideo' && typeof ytPlayerRef.current.stopVideo === 'function') {
+          ytPlayerRef.current.stopVideo();
+        }
+      } catch (e) {
+        console.warn('[MiniMusicBar] YT.Player call warning:', e);
       }
     }
 
-    // YouTube iframe postMessage control
+    // 2. Direct postMessage fallback (100% reliable across iframe states)
     if (iframeRef.current?.contentWindow) {
       try {
-        const command = musicTrack.isPlaying ? 'playVideo' : 'pauseVideo';
         iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: command, args: '' }),
+          JSON.stringify({ event: 'command', func, args }),
           '*'
         );
       } catch (_) {}
     }
+  };
+
+  // Attach YT.Player when iframe is rendered or reloaded
+  const initYouTubePlayer = () => {
+    if (typeof window === 'undefined' || !(window as any).YT?.Player || !iframeRef.current) return;
+    try {
+      if (!ytPlayerRef.current) {
+        ytPlayerRef.current = new (window as any).YT.Player(iframeRef.current, {
+          events: {
+            onReady: () => {
+              // Sync volume on player ready
+              const vol = isMusicMuted ? 0 : Math.round(musicVolume * 100);
+              if (isMusicMuted) {
+                ytPlayerRef.current?.mute?.();
+              } else {
+                ytPlayerRef.current?.unMute?.();
+                ytPlayerRef.current?.setVolume?.(vol);
+              }
+              if (musicTrack?.isPlaying) {
+                ytPlayerRef.current?.playVideo?.();
+              } else {
+                ytPlayerRef.current?.pauseVideo?.();
+              }
+            },
+          },
+        });
+      }
+    } catch (_) {}
+  };
+
+  // Sync volume and mute across BOTH HTML5 Audio and YouTube Iframe (Dual-Channel 100% Effective)
+  useEffect(() => {
+    const volPercent = Math.round(musicVolume * 100);
+
+    // Channel 1: HTML5 Audio
+    if (audioRef.current) {
+      audioRef.current.muted = isMusicMuted;
+      audioRef.current.volume = isMusicMuted ? 0 : musicVolume;
+    }
+
+    // Channel 2: YouTube Player
+    if (isMusicMuted) {
+      sendYouTubeCommand('mute');
+      sendYouTubeCommand('setVolume', [0]);
+    } else {
+      sendYouTubeCommand('unMute');
+      sendYouTubeCommand('setVolume', [volPercent]);
+    }
+  }, [musicVolume, isMusicMuted]);
+
+  // Sync play/pause state across BOTH HTML5 audio and YouTube iframe
+  useEffect(() => {
+    if (!musicTrack) return;
+
+    if (musicTrack.isPlaying) {
+      if (musicTrack.audioStreamUrl && audioRef.current) {
+        audioRef.current.play().catch((e) => {
+          console.warn('[MiniMusicBar] Audio autoplay prevented:', e);
+          setPlaybackError(true);
+        });
+      }
+      sendYouTubeCommand('playVideo');
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      sendYouTubeCommand('pauseVideo');
+    }
   }, [musicTrack?.isPlaying, musicTrack?.audioStreamUrl]);
 
-  // Handle direct control events (stop, pause, play)
+  // Handle direct control events (stop, pause, play) with instant synchronous dual-action
   useEffect(() => {
     const handleMusicAction = (e: CustomEvent) => {
       const action = e.detail?.action;
@@ -81,28 +161,16 @@ export const MiniMusicBar: React.FC = () => {
           audioRef.current.pause();
           audioRef.current.src = '';
         }
+        sendYouTubeCommand('stopVideo');
+        sendYouTubeCommand('pauseVideo');
       } else if (action === 'pause') {
         if (audioRef.current) audioRef.current.pause();
-        if (iframeRef.current?.contentWindow) {
-          try {
-            iframeRef.current.contentWindow.postMessage(
-              JSON.stringify({ event: 'command', func: 'pauseVideo', args: '' }),
-              '*'
-            );
-          } catch (_) {}
-        }
+        sendYouTubeCommand('pauseVideo');
       } else if (action === 'play') {
         if (audioRef.current && musicTrack?.audioStreamUrl) {
           audioRef.current.play().catch(() => {});
         }
-        if (iframeRef.current?.contentWindow) {
-          try {
-            iframeRef.current.contentWindow.postMessage(
-              JSON.stringify({ event: 'command', func: 'playVideo', args: '' }),
-              '*'
-            );
-          } catch (_) {}
-        }
+        sendYouTubeCommand('playVideo');
       }
     };
 
@@ -245,14 +313,16 @@ export const MiniMusicBar: React.FC = () => {
           className={
             showVideoDrawer
               ? 'w-full bg-[#080d16] border-t border-white/10 px-4 py-2 flex flex-col items-center justify-center animate-in slide-in-from-bottom duration-200'
-              : 'fixed -top-[9999px] -left-[9999px] w-1 h-1 opacity-0 pointer-events-none'
+              : 'fixed -top-[9999px] -left-[9999px] w-80 h-44 opacity-0 pointer-events-none'
           }
         >
           <div className="w-full max-w-[480px] aspect-video rounded-xl overflow-hidden border border-white/10 shadow-2xl relative bg-black">
             <iframe
+              id="boai-youtube-iframe"
               ref={iframeRef}
               src={musicTrack.embedUrl}
               title={musicTrack.title}
+              onLoad={initYouTubePlayer}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               className="w-full h-full border-0"

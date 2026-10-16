@@ -14,9 +14,8 @@
   - Active Glow: `0 0 25px rgba(99, 102, 241, 0.25)`
 
 ## Typography
-- **Headings & Badges**: Outfit, Inter, system-ui
-- **Thai Body Text**: Kanit, Prompt, Sukhumvit Set, system-ui
-- **Mono / Metrics**: JetBrains Mono, Fira Code
+- **Primary Typeface (Thai & Latin)**: Noto Sans Thai (weights 100..900)
+- **Mono / Metrics**: JetBrains Mono, Noto Sans Thai, monospace
 
 ## Component Signatures
 - **AI State Visualizer (Core Orb)**:

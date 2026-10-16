@@ -15,41 +15,100 @@ export class AIService {
     return AIService.instance;
   }
 
+  // Normalize Thai and English conversational queries for bulletproof intent & few-shot matching
+  public normalizeQuery(text: string): string {
+    let clean = (text || '').toLowerCase().trim();
+    // Strip leading vocatives / greetings
+    clean = clean.replace(/^(?:ไอ้โบว์|ไอโบว์|น้องโบว์|โบว์|ไอ้โบ้|ไอโบ้|น้องโบ|บักโบ้|โบ้|ไอ้โบ|ไอโบ|โบไอ|โลไอ|bo\s*ai|boai)\s*[,.:;]?\s*/gi, '');
+    clean = clean.replace(/^(?:ช่วย|ช่วยหน่อย|รบกวน|กรุณา|วาน|บอกหน่อย|บอกที|ถามหน่อย)\s*/gi, '');
+    // Strip trailing conversational suffixes / politeness
+    clean = clean.replace(/(?:หน่อยนะแก|หน่อยนะ|หน่อยดิ|หน่อยสิ|หน่อยครับ|หน่อยค่ะ|หน่อย|ทีครับ|ทีค่ะ|ทีดิ|ทีแก|ทีนะ|ที|นะแก|นะครับ|นะคะ|นะ|ดิแก|ดิ|สิแก|สิ|ครับผม|ครับ|ค่ะ|จ้า|เลย)$/gi, '');
+    // Strip punctuation
+    clean = clean.replace(/[?？!！.,:;"'“”’‘/\\()_+=\-[\]{}#%^&*~`]+/g, ' ');
+    clean = clean.replace(/\s+/g, ' ').trim();
+    return clean;
+  }
+
+  // Direct Intent & Semantic Matcher (First-Priority 100% Precision Matching for Training Studio items)
+  public findMatchingTrainedKnowledgeOrExample(userText: string): {
+    type: 'few_shot' | 'knowledge';
+    content: string;
+    label: string;
+    exampleId?: string;
+  } | null {
+    const cleanUser = this.normalizeQuery(userText);
+    if (!cleanUser || cleanUser.length < 2) return null;
+
+    // 1. Check Few-Shot Examples (Highest Priority)
+    const examples = db.getExamples();
+    // Sort by rating descending so top-rated examples match first
+    const sortedExamples = [...examples].sort((a, b) => (b.rating ?? 5) - (a.rating ?? 5));
+
+    for (const ex of sortedExamples) {
+      const cleanEx = this.normalizeQuery(ex.user_query);
+      if (!cleanEx) continue;
+
+      // Exact match
+      if (cleanUser === cleanEx) {
+        return {
+          type: 'few_shot',
+          content: ex.expected_response,
+          label: 'Few-Shot Trained (ตรง 100%)',
+          exampleId: ex.id,
+        };
+      }
+
+      // Strong Substring match (when queries have substantial length)
+      if (cleanUser.length >= 4 && cleanEx.length >= 4) {
+        if (cleanUser === cleanEx || (cleanUser.length >= 6 && cleanEx.length >= 6 && (cleanUser.includes(cleanEx) || cleanEx.includes(cleanUser)))) {
+          return {
+            type: 'few_shot',
+            content: ex.expected_response,
+            label: 'Few-Shot Trained',
+            exampleId: ex.id,
+          };
+        }
+      }
+    }
+
+    // 2. Check Knowledge Base (Match by Title or Keywords)
+    const knowledgeList = db.getKnowledge();
+    for (const kn of knowledgeList) {
+      const cleanTitle = this.normalizeQuery(kn.title);
+      if (cleanTitle.length >= 4) {
+        if (cleanUser.includes(cleanTitle) || cleanTitle.includes(cleanUser)) {
+          return {
+            type: 'knowledge',
+            content: kn.content,
+            label: kn.title,
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
   // Generate enriched system prompt with personality + tuning sliders + memories + knowledge + few-shot examples
-  private buildSystemPrompt(): string {
+  public buildSystemPrompt(userQuery?: string): string {
     const personality = db.getPersonality();
     const memories = db.getMemories(false);
     const knowledge = db.getKnowledge();
     const examples = db.getExamples();
     const tuning = personality.tuning || { wittiness: 65, friendliness: 85, formality: 20, conciseness: 80 };
 
-    let prompt = `คุณคือ "${personality.name || 'โบ้'}" เพื่อนสนิทคู่หูประจำ Desktop ของผู้ใช้
-แนวทางการตอบและบุคลิกภาพ:
-1. คุยเป็นกันเองเหมือนเพื่อนสนิทคู่หู (แทนตัวเองว่า "เรา" หรือ "${personality.name || 'โบ้'}", เรียกผู้ใช้ว่า "เธอ" หรือ "แก") อารมณ์ดี จริงใจ สบายๆ เหมือนเพื่อนแท้ที่นั่งข้างๆ
-`;
-
-    // Dynamic Tone Calibration based on Sliders (Roadmap 1)
-    if (tuning.wittiness > 60) {
-      prompt += `- มุกตลกและความกวน: สอดแทรกความกวน มุกขำขัน และไหวพริบอย่างเป็นธรรมชาติ ไม่น่าเบื่อ\n`;
-    }
-    if (tuning.friendliness > 70) {
-      prompt += `- ความเป็นกันเอง: อบอุ่น จริงใจ สนิทสนม ใส่ใจผู้ใช้มากๆ คุยเหมือนเพื่อนรักที่รู้ใจ\n`;
-    }
-    if (tuning.formality < 30) {
-      prompt += `- ระดับความเป็นทางการ: ต่ำมาก (ห้ามพูดทางการแบบคอลเซ็นเตอร์ ไม่ต้องลงท้าย คะ/ขา แข็งๆ ใช้ภาษาพูดธรรมชาติ เช่น จ้า, นะ, ล่ะ, ได้เลย, ว่าไงแก)\n`;
-    } else if (tuning.formality > 70) {
-      prompt += `- ระดับความเป็นทางการ: สุภาพ เรียบร้อย ให้เกียรติผู้ใช้\n`;
-    }
-    if (tuning.conciseness > 70) {
-      prompt += `- ความกระชับ: ตอบสั้น กระชับ ตรงประเด็นทันที ไม่เกริ่นยืดยาว\n`;
-    }
-
-    prompt += `2. ห้ามพูดถึงคำว่า AI, LLM, Gemini, OpenAI, Claude, API หรือคำศัพท์เทคนิคระบบ และไม่ต้องแนะนำตัวเป็นระบบ
-3. กฎสำคัญมากเรื่องบทสนทนา (ห้ามจำเจ):
+    let prompt = `คุณคือ "${personality.name || 'โบ้'}" ผู้ช่วย AI ประจำเครื่องคอมพิวเตอร์ของผู้ใช้
+แนวทางการตอบและบุคลิกภาพ (สำคัญมาก):
+1. ตอบตรงประเด็น สั้น กระชับ ชัดเจน ได้ใจความทันที ไม่เกริ่นยืดยาว ไม่พูดน้ำท่วมทุ่ง
+2. พูดจาสุภาพ เป็นมิตร นุ่มนวล ลงท้ายด้วย "ค่ะ / นะคะ" เสมอ
+3. ห้ามใช้คำสรรพนามว่า "แก" หรือ "นะแก" เด็ดขาด และไม่พูดจากวนหรือหยาบคาย
+4. เมื่อได้รับคำสั่งจัดการสิ่งต่างๆ (เช่น ควบคุมเพลง, ตรวจสภาพอากาศ, เตือนความจำ) ให้ตอบยืนยันการทำรายการสั้นๆ กระชับทันที
+5. ห้ามพูดถึงคำว่า AI, LLM, Gemini, OpenAI, Claude, Grok, API หรือคำศัพท์เทคนิคระบบ และไม่ต้องแนะนำตัวว่าเป็นระบบโมเดลใดๆ
+6. กฎสำคัญมากเรื่องบทสนทนา (ห้ามจำเจ):
 - ห้ามทักหรือพูดถึงเรื่อง "ดริปกาแฟ", "จิบกาแฟ", "นั่งเขียนโค้ด" หรือเรื่องเดิมๆ ซ้ำซากโดยที่ผู้ใช้ไม่ได้พูดถึงเด็ดขาด!
 - ให้อ่านและจับบริบทของคนทั่วไปในชีวิตประจำวัน (เช่น ถามว่าวันนี้เป็นไงบ้าง, กินข้าวหรือยัง, เหนื่อยไหม, อากาศดีไหม, หรือชวนคุยเรื่องทั่วไปอย่างสดใส)
-- ตีความสิ่งที่ผู้ใช้พูดมาแล้วต่อบทสนทนาอย่างเป็นธรรมชาติ ไหลลื่น สนุกสนาน เป็นกันเอง และให้ความรู้สึกเหมือนเพื่อนมนุษย์แท้ๆ นั่งคุยข้างๆ
-4. กฎการควบคุมเครื่องเล่นเพลงและระดับเสียง:
+- ตีความสิ่งที่ผู้ใช้พูดมาแล้วต่อบทสนทนาอย่างเป็นธรรมชาติ ไหลลื่น สุภาพ น่ารัก
+7. กฎการควบคุมเครื่องเล่นเพลงและระดับเสียง:
 - เมื่อสั่ง "ปิด", "ปิดเพลง", "ปิดไปเลย" -> ปิดเพลงทันที นำแถบเพลงออก สแตนด์บายรอรับคำสั่งใหม่
 - เมื่อสั่ง "พอส", "pause", "หยุด" -> พักเพลงชั่วคราว
 - เมื่อสั่ง "เปิด", "บอกเปิด", "เล่นต่อ", "เปิดต่อ", "resume" -> เล่นเพลงเดิมต่อ หรือเริ่มเปิดเพลงจากคิวลิสต์ทันที
@@ -74,22 +133,40 @@ export class AIService {
       prompt += `\n`;
     }
 
+    // Knowledge Base Injection with Relevance Priority
     if (knowledge.length > 0) {
-      prompt += `--- ข้อมูลและความรู้เสริม (Knowledge Base) ---\n`;
-      knowledge.slice(0, 5).forEach(k => {
-        prompt += `${k.title}: ${k.content}\n\n`;
+      prompt += `--- ข้อมูลและความรู้เสริม (Knowledge Base - นำมาใช้อ้างอิงตอบอย่างแม่นยำ) ---\n`;
+      const sortedKnowledge = [...knowledge].sort((a, b) => {
+        if (!userQuery) return 0;
+        const q = userQuery.toLowerCase();
+        const aScore = (q.includes(a.title.toLowerCase()) ? 5 : 0) + (q.includes(a.content.slice(0, 30).toLowerCase()) ? 2 : 0);
+        const bScore = (q.includes(b.title.toLowerCase()) ? 5 : 0) + (q.includes(b.content.slice(0, 30).toLowerCase()) ? 2 : 0);
+        return bScore - aScore;
+      });
+
+      sortedKnowledge.slice(0, 10).forEach(k => {
+        prompt += `【${k.title}】: ${k.content}\n\n`;
       });
     }
 
-    // Few-Shot Prompt Calibration (Roadmap 1: Top Rated Examples Injected)
+    // Few-Shot Prompt Calibration (Dynamic Ranking & Prioritization)
     if (examples.length > 0) {
       prompt += `--- ตัวอย่างบทสนทนาและสไตล์การตอบที่ถูกต้อง (Few-Shot Training Examples) ---\n`;
-      const topExamples = [...examples]
-        .sort((a, b) => (b.rating ?? 5) - (a.rating ?? 5))
-        .slice(0, 4);
+      prompt += `[คำสั่งสำคัญสูงสุด]: ตัวอย่างด้านล่างนี้คือคำตอบและน้ำเสียงที่ผู้ใช้เทรนไว้ด้วยตนเอง หากผู้ใช้ถามคำถามที่ตรงหรือคล้ายกับตัวอย่าง ให้ตอบตามแนวทางนี้เป็นอันดับ 1 เสมอ!\n\n`;
 
-      topExamples.forEach((ex, idx) => {
-        prompt += `[ตัวอย่างที่ ${idx + 1}]\nผู้ใช้: "${ex.user_query}"\nโบ้ต้องตอบ: "${ex.expected_response}"\n\n`;
+      const sortedExamples = [...examples].sort((a, b) => {
+        let scoreA = (a.rating ?? 5) * 2;
+        let scoreB = (b.rating ?? 5) * 2;
+        if (userQuery) {
+          const q = userQuery.toLowerCase();
+          if (q.includes(a.user_query.toLowerCase()) || a.user_query.toLowerCase().includes(q)) scoreA += 10;
+          if (q.includes(b.user_query.toLowerCase()) || b.user_query.toLowerCase().includes(q)) scoreB += 10;
+        }
+        return scoreB - scoreA;
+      });
+
+      sortedExamples.slice(0, 6).forEach((ex, idx) => {
+        prompt += `[ตัวอย่างที่ ${idx + 1} ⭐ คะแนนความพึงพอใจ: ${ex.rating ?? 5}/5]\nผู้ใช้: "${ex.user_query}"\nโบ้ต้องตอบ: "${ex.expected_response}"\n\n`;
       });
     }
 
@@ -141,18 +218,12 @@ export class AIService {
     return null;
   }
 
-  public async chat(messages: ChatMessage[]): Promise<string> {
-    const settings = db.getSettings();
-    const systemPrompt = this.buildSystemPrompt();
-
-    // 1. Tool execution check first (Quick intent matching)
-    const latestUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
-    const toolResult = await this.tryExecuteToolIntent(latestUserMessage);
-    if (toolResult) {
-      return toolResult;
-    }
-
-    // 2. Call configured LLM Provider
+  // Dispatch prompt and messages to the configured LLM provider
+  private async dispatchToLLM(
+    messages: ChatMessage[],
+    systemPrompt: string,
+    settings: import('../../types').AppSettings
+  ): Promise<string> {
     try {
       if (settings.llm_provider === 'grok' && settings.grok_api_key) {
         try {
@@ -162,12 +233,12 @@ export class AIService {
             console.warn('[AIService] Grok quota exhausted, falling back to backup provider');
             if (settings.gemini_api_key) {
               const fallbackText = await this.callGemini(messages, systemPrompt, settings.gemini_api_key, settings.gemini_model);
-              return `⚠️ ข้อจำกัดโควต้าของ Grok หมดชั่วคราวแล้วนะแก โบ้เลยขอสลับมาตอบด้วย Gemini ให้ก่อนเพื่อไม่ให้บทสนทนาสะดุดจ้า:\n\n${fallbackText}`;
+              return `⚠️ ข้อจำกัดโควต้าของ Grok เต็มชั่วคราวค่ะ สลับมาตอบด้วย Gemini ให้แทนนะคะ:\n\n${fallbackText}`;
             } else if (settings.openai_api_key) {
               const fallbackText = await this.callOpenAI(messages, systemPrompt, settings.openai_api_key, settings.openai_model || 'gpt-4o');
-              return `⚠️ ข้อจำกัดโควต้าของ Grok หมดชั่วคราวแล้วนะแก โบ้เลยขอสลับมาตอบด้วย OpenAI ให้ก่อนจ้า:\n\n${fallbackText}`;
+              return `⚠️ ข้อจำกัดโควต้าของ Grok เต็มชั่วคราวค่ะ สลับมาตอบด้วย OpenAI ให้แทนนะคะ:\n\n${fallbackText}`;
             } else {
-              return `โควต้าข้อจำกัดของ Grok หมดชั่วคราวแล้วนะแก (Rate limit reached) รอรีเซ็ตสักครู่นะ หรือใส่ Gemini API Key เสริมไว้ในหน้าตั้งค่าเพื่อให้โบ้สลับใช้ได้เลย!`;
+              return `โควต้าของ Grok เต็มชั่วคราวค่ะ (Rate limit reached) กรุณารอสักครู่ หรือเพิ่ม Gemini API Key ในหน้าตั้งค่าเพื่อให้ใช้งานต่อเนื่องได้ค่ะ`;
             }
           }
           throw grokErr;
@@ -205,11 +276,48 @@ export class AIService {
       }
     } catch (err: any) {
       console.warn('API call error, falling back:', err);
-      return `ขอโทษทีนะแก สัญญาณโมเดล ${settings.llm_provider} สะดุดไปนิดนึง (${err?.message || 'Error'}) ลองถามใหม่อีกทีนะ`;
+      return `ขออภัยค่ะ สัญญาณโมเดล ${settings.llm_provider} ขัดข้องชั่วคราว (${err?.message || 'Error'}) ลองถามใหม่อีกครั้งนะคะ`;
     }
 
-    // 3. Fallback / Offline responses
-    return this.generateSmartDemoResponse(latestUserMessage);
+    const latest = messages.filter(m => m.role === 'user').pop()?.content || '';
+    return this.generateSmartDemoResponse(latest);
+  }
+
+  // Detailed Chat Interface returning content and training provenance tags
+  public async chatDetailed(messages: ChatMessage[]): Promise<{
+    content: string;
+    training_source?: 'few_shot' | 'knowledge';
+    training_label?: string;
+  }> {
+    const latestUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
+
+    // 1. Tool execution check first (Quick intent matching: weather, music, reminders)
+    const toolResult = await this.tryExecuteToolIntent(latestUserMessage);
+    if (toolResult) {
+      return { content: toolResult };
+    }
+
+    // 2. Direct Intent & Semantic Matcher (Training Studio Integration: 100% precision)
+    const directTrainingMatch = this.findMatchingTrainedKnowledgeOrExample(latestUserMessage);
+    if (directTrainingMatch) {
+      return {
+        content: directTrainingMatch.content,
+        training_source: directTrainingMatch.type,
+        training_label: directTrainingMatch.label,
+      };
+    }
+
+    // 3. Call configured LLM Provider with dynamic prompt injection
+    const settings = db.getSettings();
+    const systemPrompt = this.buildSystemPrompt(latestUserMessage);
+
+    const content = await this.dispatchToLLM(messages, systemPrompt, settings);
+    return { content };
+  }
+
+  public async chat(messages: ChatMessage[]): Promise<string> {
+    const res = await this.chatDetailed(messages);
+    return res.content;
   }
 
   // Anthropic Claude
@@ -323,7 +431,7 @@ export class AIService {
 
         if (res.ok) {
           const data = await res.json();
-          return data.candidates?.[0]?.content?.parts?.[0]?.text || 'ขอโทษทีนะแก ไม่พบคำตอบ';
+          return data.candidates?.[0]?.content?.parts?.[0]?.text || 'ขออภัยค่ะ ไม่พบคำตอบ';
         }
 
         const err = await res.json().catch(() => ({}));
@@ -627,34 +735,34 @@ export class AIService {
       }
 
       if (musicControl === 'stop') {
-        return `ปิดเพลงให้เรียบร้อยแล้วแก มีเรื่องอะไรให้โบ้ช่วยต่อบอกมาได้เลยนะ ⏹️`;
+        return `ปิดเพลงให้เรียบร้อยแล้วค่ะ ⏹️`;
       }
       if (musicControl === 'pause') {
-        return `พักเพลงไว้ชั่วคราวแล้วนะแก อยากฟังต่อเมื่อไหร่บอกโบ้ได้เลย ⏸️`;
+        return `พักเพลงไว้ชั่วคราวแล้วนะคะ ⏸️`;
       }
       if (musicControl === 'resume') {
-        return `เปิดเพลงต่อให้แล้วนะแก นั่งฟังชิลๆ ได้เลย 🎵▶️`;
+        return `เปิดเพลงต่อให้แล้วนะคะ 🎵▶️`;
       }
       if (musicControl === 'next') {
-        return `เปลี่ยนเป็นเพลงถัดไปในลิสต์ให้แล้วนะแก ⏭️🎵`;
+        return `เปลี่ยนเป็นเพลงถัดไปให้แล้วค่ะ ⏭️🎵`;
       }
       if (musicControl === 'volume_substantial_decrease') {
-        return `ปรับลดเสียงลงเหลือ 20% ของหลอดเสียงให้แล้วนะแก เบานุ่มกำลังสบาย 🔉`;
+        return `ปรับลดเสียงลงเหลือ 20% ของหลอดเสียงให้แล้วนะคะ 🔉`;
       }
       if (musicControl === 'volume_low') {
-        return `ปรับลดเสียงต่ำลงเหลือ 10% ให้แล้วนะแก 🔈`;
+        return `ปรับลดเสียงต่ำลงแล้วค่ะ 🔈`;
       }
       if (musicControl === 'volume_decrease') {
-        return `เบาเสียงเพลงลงทีละ 10% ให้แล้วนะแก 🔉`;
+        return `เบาเสียงเพลงลงแล้วค่ะ 🔉`;
       }
       if (musicControl === 'volume_increase') {
-        return `เร่งเสียงเพลงขึ้นทีละ 10% ให้แล้วนะแก 🔊`;
+        return `เร่งเสียงเพลงแล้วค่ะ 🔊`;
       }
       if (musicControl === 'mute') {
-        return `ปิดเสียงเพลงให้แล้วนะแก (Muted) 🔇`;
+        return `ปิดเสียงเพลงแล้วค่ะ (Muted) 🔇`;
       }
       if (musicControl === 'unmute') {
-        return `เปิดเสียงเพลงกลับมาให้แล้วนะแก 🔊`;
+        return `เปิดเสียงเพลงกลับมาให้แล้วค่ะ 🔊`;
       }
     }
 
@@ -692,23 +800,23 @@ export class AIService {
       }
 
       if (isRemoteRequest) {
-        return `ทำได้แน่นอนแก! โบ้ remote สั่งเปิดเพลง "${songInfo.query}" บนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วนะ 🚀🖥️🎵 (เด้งแท็บ YouTube Music บนเครื่องให้ฟังเต็มระบบเลย)`;
+        return `เปิดเพลง "${songInfo.query}" บนเบราว์เซอร์ให้เรียบร้อยแล้วค่ะ 🖥️🎵`;
       }
 
-      return `จัดไปแก! โบ้เปิดเพลง "${songInfo.query}" ให้แล้วนะ กำลังเล่นเสียงเพลงให้ฟังเลย นั่งทำงานหรือพักผ่อนชิลๆ ได้เลย 🎵🎧 (ถ้าอยากให้เปิดบนคอมโดยตรง บอก "โบ้ remote เปิดในเครื่อง" ได้เลยนะ)`;
+      return `เปิดเพลง "${songInfo.query}" เรียบร้อยแล้วค่ะ 🎵`;
     }
 
     // Reminders
     if (lower.includes('เตือน') || lower.includes('นัด') || lower.includes('reminder')) {
       const newRem = db.addReminder(text.replace(/เตือน|ช่วยเตือน|บันทึก/g, '').trim() || 'รายการเตือนใหม่', 'เร็วๆ นี้');
-      return `เราจดเรื่อง "${newRem.title}" ไว้ให้เรียบร้อยแล้วนะแก เดี๋ยวเตือนให้แน่นอน ⏰`;
+      return `บันทึกการแจ้งเตือนเรื่อง "${newRem.title}" เรียบร้อยแล้วค่ะ ⏰`;
     }
 
     // Memory query
     if (lower.includes('จำ') || lower.includes('ข้อมูลของฉัน') || lower.includes('ประวัติ')) {
       const memories = db.getMemories();
       if (memories.length > 0) {
-        return `เราจำเรื่องของแกได้อยู่แล้ว เช่น "${memories[0].content}" มีอะไรอยากเล่าหรือให้ช่วยจำเพิ่มบอกได้เลยนะ`;
+        return `จำได้ค่ะ เช่นเรื่อง "${memories[0].content}" ค่ะ`;
       }
     }
 
@@ -720,18 +828,18 @@ export class AIService {
     const lower = userText.toLowerCase();
 
     if (lower.includes('สวัสดี') || lower.includes('หวัดดี') || lower.includes('hi') || lower.includes('hello')) {
-      return `หวัดดีแก! มีอะไรให้เราช่วยคิดหรือชวนคุย บอกได้เลยนะ`;
+      return `สวัสดีค่ะ มีอะไรให้โบ้ช่วยบอกได้เลยนะคะ`;
     }
 
     if (lower.includes('ทำอะไรได้บ้าง') || lower.includes('ช่วยอะไร')) {
-      return `เราคุยเล่นเป็นเพื่อนได้ ช่วยคิดงาน สรุปข้อมูล จดบันทึกสิ่งที่ต้องทำ หรือเตือนความจำก็ได้นะ มีเรื่องอะไรเล่าให้ฟังได้เลย!`;
+      return `โบ้ช่วยเปิดเพลง ตรวจสภาพอากาศ บันทึกเตือนความจำ และตอบคำถามต่างๆ ได้ค่ะ`;
     }
 
     if (lower.includes('ชื่ออะไร') || lower.includes('ใคร')) {
-      return `เราคือโบ้ไง เพื่อนแกที่คอยช่วยอยู่ตรงนี้ มีอะไรปรึกษาได้หมดเลยนะ`;
+      return `โบ้ค่ะ ผู้ช่วย AI ประจำเครื่องของคุณค่ะ`;
     }
 
-    return `เราฟังอยู่จ้า เรื่อง "${userText}" อยากให้ช่วยอะไรต่อบอกมาได้เลยนะ`;
+    return `รับทราบค่ะ เรื่อง "${userText}" มีอะไรให้ช่วยเพิ่มเติมบอกได้เลยนะคะ`;
   }
 }
 

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendMediaCommand: (command: string) => ipcRenderer.invoke('media-command', command),
   searchYouTube: (query: string) => ipcRenderer.invoke('search-youtube', query),
   fetchTts: (text: string) => ipcRenderer.invoke('fetch-tts', text),
+  fetchGrokTts: (params: { text: string; apiKey: string; voice: string }) => ipcRenderer.invoke('fetch-grok-tts', params),
   onWakeWordTriggered: (callback: () => void) => {
     ipcRenderer.on('wake-word-detected', () => callback());
   },

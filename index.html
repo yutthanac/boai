@@ -5,10 +5,27 @@
     <link rel="icon" type="image/png" href="/bobo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Bo AI — Personal AI Desktop Assistant</title>
-    <!-- Google Fonts for English and Thai -->
+    <!-- Google Fonts: Noto Sans Thai & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@100..900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Immediate Theme Initialization to prevent flash -->
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('bo_theme');
+          if (saved === 'light') {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.classList.add('light');
+            document.documentElement.setAttribute('data-theme', 'light');
+          } else {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+            document.documentElement.setAttribute('data-theme', 'dark');
+          }
+        } catch(e) {}
+      })();
+    </script>
   </head>
   <body class="bg-background text-slate-100 antialiased overflow-hidden select-none font-sans">
     <div id="root"></div>

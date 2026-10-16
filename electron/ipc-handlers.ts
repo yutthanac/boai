@@ -184,5 +184,66 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       return { success: false, error: e?.message };
     }
   });
+
+  // Native xAI Grok TTS Proxy (Bypasses browser CORS & supports official xAI TTS endpoint)
+  ipcMain.handle('fetch-grok-tts', async (_event, params: { text: string; apiKey: string; voice?: string }) => {
+    try {
+      const { text, apiKey, voice } = params || {};
+      if (!apiKey) return { success: false, error: 'Missing xAI API Key' };
+
+      const body = JSON.stringify({
+        text: (text || '').trim(),
+        voice: voice || 'leo',
+        language: 'auto',
+      });
+
+      return new Promise<{ success: boolean; dataUrl?: string; error?: string }>((resolve) => {
+        const req = https.request('https://api.x.ai/v1/tts', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+          timeout: 10000,
+        }, (res) => {
+          if (res.statusCode && res.statusCode >= 400) {
+            let errBuf = '';
+            res.on('data', c => errBuf += c);
+            res.on('end', () => {
+              resolve({ success: false, error: `xAI Grok TTS HTTP ${res.statusCode}: ${errBuf.slice(0, 150)}` });
+            });
+            return;
+          }
+
+          const chunks: Buffer[] = [];
+          res.on('data', chunk => chunks.push(chunk));
+          res.on('end', () => {
+            const buf = Buffer.concat(chunks);
+            const base64 = buf.toString('base64');
+            const mime = res.headers['content-type'] || 'audio/mpeg';
+            resolve({
+              success: true,
+              dataUrl: `data:${mime};base64,${base64}`
+            });
+          });
+        });
+
+        req.on('error', (err) => {
+          resolve({ success: false, error: err.message });
+        });
+
+        req.on('timeout', () => {
+          req.destroy();
+          resolve({ success: false, error: 'xAI Grok TTS Request Timeout' });
+        });
+
+        req.write(body);
+        req.end();
+      });
+    } catch (e: any) {
+      return { success: false, error: e?.message };
+    }
+  });
 }
 

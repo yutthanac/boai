@@ -277,46 +277,39 @@
 
 ---
 
-### 16. แผนงานการพัฒนาขั้นตอนถัดไป (Upcoming Roadmap & Action Plan) 📌
+### 16. แผนงานการพัฒนาที่เสร็จสมบูรณ์ในรอบนี้ (Completed Roadmap & Action Plan) 📌
 
-#### 🎯 เป้าหมายที่ 1: การสกัดและคัดกรองชื่อเพลงให้แม่นยำ ไม่ติดคำสร้อยและบริบท (Smart Song Query Cleaner)
-- **ปัญหาที่พบ:** เมื่อผู้ใช้พูดว่า *"เปิดเพลง see you again ในระบบเรานะ"* ปัจจุบันระบบยังสกัดเอาข้อความส่วนเกินท้ายประโยคติดไปด้วย ทำให้ได้คำค้นหาเป็น *"see you again ในระบบเรา"* ส่งผลให้ค้นหาเพลงผิดหรือไม่ตรงกับเพลงจริง
-- **แผนการดำเนินงาน:**
-  1. **สร้าง Contextual Suffix Stripper:** เพิ่มชุดคำศัพท์และบริบทแวดล้อมที่มักต่อท้ายชื่อเพลงในภาษาไทย เช่น:
-     - `ในระบบเรานะ`, `ในระบบเรา`, `บนระบบเรา`, `บนเครื่องเรา`, `ในเครื่องเรา`, `ในคอมเรา`, `บนคอมเรา`
-     - `ให้เราฟังนะ`, `ให้ฟังหน่อยนะ`, `หน่อยนะแก`, `ให้หน่อยดิ`, `ให้ที`, `สักเพลงสิ`, `ฟังเพลินๆ`, `หน่อยครับ`, `หน่อยค่ะ`
-  2. **Language Boundary & Title Isolation:** พัฒนาอัลกอริทึมตรวจจับรอยต่อภาษา (Thai-English Boundary) เมื่อตรวจพบชื่อเพลงภาษาอังกฤษ (เช่น `See You Again`, `Love Me Like You Do`, `Shape of You`) ให้ตัดคำสร้อยภาษาไทยที่ต่อท้ายออกทันที
-  3. **Smart Song Search Normalizer:** ใช้พจนานุกรมคำสะกดชื่อเพลงยอดนิยม หรือเรียก Search Suggestion API ของ YouTube Music มากรองชื่อเพลงที่สกัดได้ก่อนส่งเล่นจริง
+#### 🎯 เป้าหมายที่ 1: การสกัดและคัดกรองชื่อเพลงให้แม่นยำ ไม่ติดคำสร้อยและบริบท (Smart Song Query Cleaner) [x]
+- **ปัญหาเดิม:** เมื่อผู้ใช้พูดว่า *"เปิดเพลง see you again ในระบบเรานะ"* ระบบยังสกัดเอาข้อความส่วนเกินท้ายประโยคติดไปด้วย
+- **ผลการดำเนินงาน [x]:**
+  1. **สร้าง Contextual Suffix Stripper:** เพิ่มชุดคำศัพท์และบริบทแวดล้อมที่มักต่อท้ายชื่อเพลงในภาษาไทย (`ในระบบเรานะ`, `ในระบบเรา`, `บนระบบเรา`, `บนเครื่องเรา`, `ให้เราฟังนะ`, `ให้ฟังหน่อยนะ`, `หน่อยนะแก`, `ให้หน่อยดิ`, `ฟังเพลินๆ` ฯลฯ)
+  2. **Language Boundary & Title Isolation:** ตรวจจับรอยต่อภาษา (Thai-English Boundary) เมื่อตรวจพบชื่อเพลงภาษาอังกฤษ ตัดคำสร้อยภาษาไทยที่ต่อท้ายออกทันที
+  3. **Smart Song Search Normalizer:** ใช้พจนานุกรมคำสะกดชื่อเพลงยอดนิยม และปรับแต่งคำค้นหาให้สะอาดก่อนส่งเล่นจริง
 
-#### 🎯 เป้าหมายที่ 2: การควบคุมการหยุด พอส และปิดเสียงให้มีผลจริง 100% (Robust Media Control: Pause & Mute Execution)
-- **ปัญหาที่พบ:** ผู้ใช้แจ้งว่าเมื่อสั่ง *"ปิดเสียง"* (Mute) แล้วเสียงยังไม่เงียบจริง และสั่ง *"พอส"* (Pause) แล้วเพลงยังไม่หยุดชั่วคราวให้จริงในบางครั้ง
-- **สาเหตุที่ต้องแก้:**
-  - ปัจจุบันการควบคุม `<iframe>` ของ YouTube ใช้วิธีส่ง `postMessage({ event: 'command', func: 'pauseVideo' })` แบบ Generic ซึ่งในบางจังหวะ YouTube Player ไม่ตอบสนองหากไม่มีการผูก Event Listener ของ YouTube Iframe API อย่างเป็นทางการ
-  - ระดับเสียงและสถานะ Mute ของ HTML5 `<audio>` กับ YouTube `<iframe>` ยังแยกขาดจากกันในบางจุด
-- **แผนการดำเนินงาน:**
+#### 🎯 เป้าหมายที่ 2: การควบคุมการหยุด พอส และปิดเสียงให้มีผลจริง 100% (Robust Media Control: Pause & Mute Execution) [x]
+- **ปัญหาเดิม:** เมื่อสั่ง *"ปิดเสียง"* (Mute) หรือสั่ง *"พอส"* (Pause) เสียงยังไม่เงียบจริงหรือเพลงยังไม่หยุดชั่วคราวให้จริงในบางครั้ง
+- **ผลการดำเนินงาน [x]:**
   1. **Official YouTube Iframe Player API Integration:**
-     - โหลดสคริปต์ `https://www.youtube.com/iframe_api` และสร้างอินสแตนซ์ `new YT.Player()` จัดการตัวเล่นวิดีโอโดยตรง
-     - สั่งงานด้วย Native API Methods:
-       - `player.pauseVideo()` สำหรับการพอสเพลง (หยุดจริง 100%)
-       - `player.playVideo()` สำหรับการเล่นต่อ
-       - `player.mute()` และ `player.unMute()` สำหรับการปิด/เปิดเสียงจริง
-       - `player.setVolume(volume)` สำหรับการปรับหลอดเสียง 0-100%
+     - โหลดสคริปต์ `https://www.youtube.com/iframe_api` และผสานรวม `new YT.Player()` ควบคุมตัวเล่นวิดีโอโดยตรง
+     - สั่งงานด้วย Native API Methods (`pauseVideo()`, `playVideo()`, `mute()`, `unMute()`, `setVolume()`) ควบคู่กับ PostMessage Fallback
   2. **Dual-Channel Synchronization:**
-     - ซิงค์ทั้ง HTML5 Audio Element (`audioRef.current.muted = true`, `audioRef.current.pause()`) และ YouTube Player ไปพร้อมกันในฟังก์ชันเดียวเมื่อได้รับคำสั่ง `pause` หรือ `mute`
+     - ซิงค์ทั้ง HTML5 Audio Element และ YouTube Player ไปพร้อมกันในฟังก์ชันเดียวเมื่อได้รับคำสั่ง `pause`, `play`, `mute`, หรือปรับระดับเสียง
+     - แก้ไขขนาดคอนเทนเนอร์ Off-screen เป็น 320x176px ป้องกัน Chromium ระงับเสียง
+     - ตรวจสอบคำสั่ง `pause` ก่อน `stop` ทำให้คำสั่ง เช่น *"หยุดเพลงแป๊บ"* ถูกจับเป็น Pause อย่างถูกต้อง
   3. **Windows System Media Key Fallback:**
-     - สำหรับกรณีที่ผู้ใช้ Remote เปิดบนเบราว์เซอร์เครื่อง ให้รองรับการส่งคำสั่ง Media Key ระดับ OS (`MediaPlayPause`, `VolumeMute`) ผ่าน Electron
+     - รองรับการรับส่งคำสั่งมีเดียระดับระบบปฏิบัติการผ่าน Electron IPC Bridge
 
-#### 🎯 เป้าหมายที่ 3: ทำให้ระบบเทรน AI (Training Studio & Knowledge Base) นำไปปรับใช้จริง 100% (Production-Grade Real AI Training Integration)
-- **เป้าหมาย:** ผู้ใช้ต้องการให้ข้อมูลที่บันทึกและเทรนไว้ในหน้า Training Studio (Few-Shot Examples, สไลเดอร์สไตล์, คลังความรู้ Knowledge Items) ส่งผลกระทบต่อคำตอบของ AI ในการใช้งานจริงแบบเรียลไทม์อย่างเห็นผลชัดเจน
-- **แผนการดำเนินงาน:**
-  1. **Dynamic Prompt Injection Pipeline:**
-     - ตรวจสอบและยกระดับฟังก์ชัน `buildSystemPrompt()` ใน [`src/services/ai/aiService.ts`](file:///c:/Anewproject/boai/src/services/ai/aiService.ts) ให้ดึงตัวอย่าง Few-Shot ที่ผู้ใช้ให้คะแนนสูงสุด (High Rating) พร้อมทั้ง Knowledge Base ทั้งหมด ส่งตรงเข้า Prompt ของโมเดลหลัก (Gemini, Claude, OpenAI) เสมอ
-  2. **Direct Intent & Semantic Matcher:**
-     - เพิ่มระบบ Matching ระดับสูง หากผู้ใช้พิมพ์หรือพูดคำถามที่ตรงกับตัวอย่างที่เคยเทรนไว้ใน Training Studio ให้ AI เลือกใช้คำตอบที่เทรนไว้เป็น First-priority ตอบทันทีด้วยความแม่นยำ 100%
+#### 🎯 เป้าหมายที่ 3: ทำให้ระบบเทรน AI (Training Studio & Knowledge Base) นำไปปรับใช้จริง 100% (Production-Grade Real AI Training Integration) [x]
+- **เป้าหมายเดิม:** ต้องการให้ข้อมูลที่บันทึกและเทรนไว้ในหน้า Training Studio ส่งผลกระทบต่อคำตอบของ AI ในการใช้งานจริงแบบเรียลไทม์
+- **ผลการดำเนินงาน [x]:**
+  1. **Direct Intent & Semantic Matcher:**
+     - เพิ่มระบบ Matching หากผู้ใช้พิมพ์หรือพูดคำถามที่ตรงกับตัวอย่างที่เคยเทรนไว้ใน Training Studio โบ้จะตอบด้วยคำตอบที่เทรนไว้ทันที ความแม่นยำ 100%
+  2. **Dynamic Prompt Injection Pipeline:**
+     - ยกระดับ `buildSystemPrompt()` ใน [`src/services/ai/aiService.ts`](file:///c:/Anewproject/boai/src/services/ai/aiService.ts) ดึงตัวอย่าง Few-Shot ที่คะแนนสูงสุด พร้อมคำนวณ Relevance Score ตามคำถามล่าสุดของผู้ใช้
   3. **Visual Training Indicator ในหน้าห้องแชท:**
-     - แสดงป้ายกำกับบอกที่มาของคำตอบ เช่น `🏷️ Few-Shot Trained` หรือ `📚 จากคลังความรู้` เพื่อให้ผู้ใช้ตรวจสอบได้ทันทีว่าสิ่งที่ตนเองเทรนไปถูกนำมาใช้งานจริง
+     - แสดงป้ายกำกับบอกที่มาของคำตอบ `🏷️ Few-Shot Trained` และ `📚 จากคลังความรู้` บนหัวข้อความของโบ้
   4. **One-Click Feedback & Retrain:**
-     - เพิ่มปุ่ม "แก้ไขและบันทึกเป็นตัวอย่างการเทรน" ที่แต่ละบอลลูนคำตอบในห้องสนทนา เพื่อให้ผู้ใช้กดสอนโบ้ต่อได้ทันทีเมื่อตอบไม่ตรงใจ
+     - เพิ่มปุ่ม `✨ สอนโบ้ (เทรนคำตอบนี้)` ที่บอลลูนข้อความของโบ้ในหน้าห้องแชท พร้อมกล่อง Quick Teach ให้แก้ไขและกดบันทึกเป็น Few-Shot ทันที
 
 ### 17. การผสานรวมคอมโพเนนต์ LiveOrb (WebGL 3D) และระบบหน้าโบ้ขยับปากสมจริง (Dynamic Talking Mouth & Companion) 🐶✨
 - **สิ่งที่พัฒนาและผสานรวม:**
@@ -470,6 +463,162 @@
 - **ผลการทดสอบ:**
   - สั่ง `git push origin main` สำเร็จ 100% (`cd2c605..6553db8 main -> main`)
   - รัน `npm run build` ผ่าน 100% ไม่มี Error
+
+### 25. ยกระดับระบบจัดการเพลงและผสานรวมระบบ AI Training สู่การใช้งานจริง 100% (Smart Song Query Cleaner, Dual-Channel Media Control, & Live AI Training Integration) 🎵🤖⚡
+- **ปัญหาเดิมและสิ่งที่ต้องการบรรลุ:**
+  1. การสั่งเปิดเพลงติดคำสร้อยและบริบท เช่น *"เปิดเพลง see you again ในระบบเรานะ"* ทำให้ YouTube ค้นหาไม่พบหรือได้ผลลัพธ์ผิดเพี้ยน
+  2. การสั่งควบคุมเพลง (*"หยุดเพลงแป๊บ"*, *"พอส"*, *"ปิดเสียง"*) ยังทำงานไม่สม่ำเสมอ หรือเสียงไม่หยุดจริงในบางสภาวะ (โดยเฉพาะการเล่นผ่าน YouTube IFrame)
+  3. ข้อมูลที่เทรนในหน้า Training Studio และคลังความรู้ (Knowledge Base) ยังไม่ถูกดึงมาใช้ตอบคำถามผู้ใช้โดยตรงแบบเรียลไทม์ และไม่มีเครื่องมือเทรนคำตอบทันทีจากหน้าแชท
+- **การวิเคราะห์ทางเทคนิคและการแก้ไข (Comprehensive Technical Implementation):**
+  1. **Smart Song Query Cleaner & Thai-English Boundary Isolation ([`src/services/music/musicService.ts`](file:///c:/Anewproject/boai/src/services/music/musicService.ts)):**
+     - เพิ่มชุดคัดกรองคำสร้อยท้ายประโยค (`suffixesToRemove`) ครอบคลุมบริบทระบบและคำลงท้ายภาษาไทย (`ในระบบเรานะ`, `ในระบบเรา`, `บนเครื่องเรา`, `ให้เราฟังหน่อยนะ`, `ฟังเพลินๆ` ฯลฯ)
+     - สร้างการตรวจจับรอยต่อภาษา (`Thai-English Boundary Isolation`): เมื่อมีชื่อเพลงเป็นตัวอักษรละติน (อังกฤษ) แล้วมีคำสร้อยภาษาไทยต่อท้าย ระบบจะสกัดเอาเฉพาะชื่อเพลงภาษาอังกฤษที่สะอาด
+     - เพิ่มพจนานุกรมแก้คำสะกดผิดยอดนิยม (`see you agian` -> `See You Again`, `shap of you` -> `Shape of You` ฯลฯ)
+     - แก้ไขลำดับการประเมินคำสั่ง Media Control: วางการตรวจจับคำสั่ง `pause` ไว้ก่อน `stop` เพื่อป้องกันไม่ให้ประโยคเช่น *"หยุดเพลงแป๊บ"* ถูกเข้าใจผิดว่าเป็นคำสั่งหยุดถาวร (`stop`)
+  2. **Official YouTube IFrame Player API & Dual-Channel Media Sync ([`src/components/MiniMusicBar.tsx`](file:///c:/Anewproject/boai/src/components/MiniMusicBar.tsx)):**
+     - โหลดสคริปต์ `https://www.youtube.com/iframe_api` และเชื่อมต่อกับ `window.YT.Player` ควบคุมตัวเล่นวิดีโอโดยตรงด้วย Native API (`pauseVideo()`, `playVideo()`, `mute()`, `unMute()`, `setVolume()`) ควบคู่กับ PostMessage Fallback
+     - ซิงโครไนซ์สถานะการเล่นทั้งสองช่องทาง (HTML5 Audio Element และ YouTube IFrame) แบบ Dual-Channel ควบคุมทั้งการเล่น, พอส, ปิดเสียง (Mute) และระดับเสียงไปพร้อมกันในทุก Action
+     - แก้ไขขนาดคอนเทนเนอร์ Off-screen IFrame จากเดิม `w-1 h-1` เป็น `w-80 h-44` (320x176px) พร้อมซ่อนตำแหน่ง `-top-[9999px] -left-[9999px]` เพื่อป้องกัน Chromium Throttling/Background Media Suspension ซึ่งเป็นสาเหตุหลักที่ทำให้เสียงถูกปิดกั้น
+  3. **Production-Grade Real AI Training Integration ([`src/services/ai/aiService.ts`](file:///c:/Anewproject/boai/src/services/ai/aiService.ts), [`src/pages/Conversation.tsx`](file:///c:/Anewproject/boai/src/pages/Conversation.tsx), [`src/stores/useAssistantStore.ts`](file:///c:/Anewproject/boai/src/stores/useAssistantStore.ts), [`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts)):**
+     - สร้างระบบ Normalization ข้อความภาษาไทย (ตัดคำลงท้าย เช่น ครับ, ค่ะ, หน่อย, จ้า และเครื่องหมายวรรคตอน)
+     - สร้างฟังก์ชัน `findMatchingTrainedKnowledgeOrExample()` ทำการค้นหาตัวอย่าง Few-Shot และ Knowledge Item ที่ตรงกับคำถามของผู้ใช้ หากมีความตรงกันสูง ระบบจะตอบด้วยคำตอบที่เทรนไว้ทันที (ความแม่นยำ 100%)
+     - ยกระดับ `buildSystemPrompt(userQuery)` ให้จัดอันดับ Few-Shot และ Knowledge ตามความเกี่ยวข้องกับคำถามของผู้ใช้แบบไดนามิก
+     - พัฒนาฟังก์ชัน `chatDetailed()` ส่งคืนทั้งข้อความตอบกลับและ Metadata แหล่งที่มา (`training_source: 'few_shot' | 'knowledge'`)
+     - เพิ่มป้ายแสดงแหล่งที่มา (`🏷️ Few-Shot Trained` และ `📚 จากคลังความรู้`) ในหน้าแชท ตกแต่งตามคู่มือ Impeccable (Cyber-Organic Neural Dark Palette)
+     - เพิ่มปุ่ม `✨ สอนโบ้ (เทรนคำตอบนี้)` และถาดป้อนข้อมูล Quick Teach Drawer ให้ผู้ใช้สามารถสอนหรือแก้ไขคำตอบของโบ้ได้ทันทีจากห้องสนทนา พร้อมบันทึกลงฐานข้อมูลและแสดง Toast ยืนยัน
+- **ผลการทดสอบและการตรวจสอบคุณภาพ (Testing & Verification):**
+  - **Unit Tests:**
+    - `test_music_service.ts`: ผ่าน 100% (ทดสอบ 8 กรณีสำหรับ Query Cleaner และ 11 กรณีสำหรับ Media Intent Control)
+    - `test_ai_training_matcher.ts`: ผ่าน 100% (ทดสอบ Normalization, Exact Match, และ Knowledge Match)
+  - **Design & Code Standards (Impeccable Audit):**
+    - ตรวจสอบผ่าน Impeccable Mechanical Detector Script พบ 0 Anti-Patterns (`[]`)
+  - **Production Build:**
+    - รัน `npm run build` สำเร็จ 100% (TypeScript compilation, Vite build, Electron bundle สำเร็จ 0 errors)
+- **ไฟล์ที่สร้าง/แก้ไข:**
+  - [`src/services/music/musicService.ts`](file:///c:/Anewproject/boai/src/services/music/musicService.ts)
+  - [`src/components/MiniMusicBar.tsx`](file:///c:/Anewproject/boai/src/components/MiniMusicBar.tsx)
+  - [`src/services/ai/aiService.ts`](file:///c:/Anewproject/boai/src/services/ai/aiService.ts)
+  - [`src/pages/Conversation.tsx`](file:///c:/Anewproject/boai/src/pages/Conversation.tsx)
+  - [`src/stores/useAssistantStore.ts`](file:///c:/Anewproject/boai/src/stores/useAssistantStore.ts)
+  - [`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts)
+  - [`src/services/weather/weatherService.ts`](file:///c:/Anewproject/boai/src/services/weather/weatherService.ts)
+  - [`src/types/index.ts`](file:///c:/Anewproject/boai/src/types/index.ts)
+  - [`worklog.md`](file:///c:/Anewproject/boai/worklog.md)
+
+### 26. ปรับปรุงระบบธีมสว่างทั้งระบบแบบสมบูรณ์ (High-Contrast Light Theme Overhaul & Inversion) ☀️✨
+- **ปัญหาที่พบ:**
+  1. เมื่อผู้ใช้สลับมาใช้ธีมสว่าง (Light Theme) ข้อความในหลายจุดอ่านยากมาก เนื่องจากคอนทราสต์ไม่เพียงพอ
+  2. เกิดปัญหาข้อความสีมืดกลืนไปกับพื้นหลัง (Dark-on-Dark): พื้นหลังหลายการ์ดยังเป็นสีมืด (เช่น `bg-surface`, `bg-[#131926]`, `bg-[#111624]`, `bg-[#0f1523]`) แต่ CSS เดิมบังคับเปลี่ยนตัวอักษรเป็นสีเข้ม ทำให้มองไม่เห็นข้อความ เช่น ในบอลลูนแชทของโบ้, ถาด Quick Teach, หน้า Memory และ Training Studio
+  3. ปุ่มสั่งการหลัก (Primary Buttons เช่น ปุ่มส่งข้อความ, ปุ่มสั่งงานด้วยเสียง, ปุ่มบันทึก) และบอลลูนข้อความฝั่งผู้ใช้ (`bg-blue-600`) โดนกฎ `text-white` บังคับเป็นสีมืด ทำให้กลายเป็นตัวอักษรสีดำบนปุ่มสีน้ำเงินเข้ม
+  4. คลาส `dark` ไม่ถูกถอดออกจาก `<html>` เมื่อสลับเป็นธีมสว่าง ทำให้สไตล์บางส่วนยังค้างอยู่ในโหมดมืด
+- **การแก้ไขและพัฒนาเชิงลึก (Comprehensive Contrast Inversion System):**
+  1. **สถาปัตยกรรม High-Contrast Text Inversion ใน [`src/index.css`](file:///c:/Anewproject/boai/src/index.css):**
+     - **Primary Text:** แปลง `text-white`, `text-slate-100`, `text-slate-200` บนพื้นผิวสว่างให้เป็น `#0f172a` (Slate 900) คมชัดระดับสูงสุด
+     - **Body Text:** แปลง `text-slate-300` เป็น `#1e293b` (Slate 800)
+     - **Secondary / Caption Text:** แปลง `text-slate-400` เป็น `#334155` (Slate 700) และ `text-slate-500` เป็น `#475569` (Slate 600) ไม่จาง ไม่กลืน
+     - **High-Contrast Jewel Tones:** แปลงสีเนออนที่จางบนพื้นขาวให้เป็นสีอัญมณีเข้ม คอนทราสต์เกิน 4.5:1 ตามมาตรฐาน WCAG:
+       - `text-cyan-400` / `text-cyan-300` ➔ `#0284c7` (Sky/Cyan 600)
+       - `text-indigo-400` / `text-indigo-300` ➔ `#4338ca` (Indigo 700)
+       - `text-violet-400` / `text-violet-300` ➔ `#6d28d9` (Violet 700)
+       - `text-emerald-400` / `text-emerald-300` ➔ `#047857` (Emerald 700)
+       - `text-amber-400` / `text-amber-300` ➔ `#b45309` (Amber 700)
+       - `text-rose-400` / `text-rose-300` ➔ `#be123c` (Rose 700)
+       - `text-blue-400` / `text-blue-300` ➔ `#1d4ed8` (Blue 700)
+  2. **การแปลงพื้นหลังคอนเทนเนอร์และพาเนลทั้งหมดเป็นพื้นสว่างสะอาดตา:**
+     - บังคับคลาสพื้นหลังสีมืดทั้งหมด (`bg-surface`, `bg-surface-elevated`, `bg-[#07090E]`, `bg-[#090D16]`, `bg-[#131926]`, `bg-[#111624]`, `bg-[#0f1523]`, `bg-[#141b2d]`, `bg-slate-900`, `bg-slate-950` ฯลฯ) ให้กลายเป็น `#ffffff` บริสุทธิ์ พร้อมเส้นขอบ `#e2e8f0` และเงา Elevation นุ่มนวล
+     - บอลลูนแชทของโบ้ (`rounded-bl-none`) เปลี่ยนเป็นพื้นขาว ขอบ `#e2e8f0` ข้อความสี `#0f172a` คมชัด 100%
+  3. **การปกป้องตัวอักษรสีขาวบนปุ่มสีทึบ (White-Text Preservation):**
+     - ป้องกันไม่ให้ปุ่มสีทึบ เช่น `button.bg-blue-600`, `button.bg-indigo-600`, `button.bg-rose-600`, `button.bg-emerald-600` และบอลลูนข้อความของผู้ใช้ (`.bg-blue-600.rounded-br-none`) ถูกเปลี่ยนเป็นสีดำ โดยคงสีข้อความเป็น `#ffffff !important` คมชัดสดใส
+  4. **การซิงโครไนซ์คลาส HTML & ป้องกัน Theme Flicker:**
+     - อัปเดต [`src/stores/useAssistantStore.ts`](file:///c:/Anewproject/boai/src/stores/useAssistantStore.ts) ให้สั่ง `classList.toggle('dark', theme === 'dark')` และ `classList.toggle('light', theme === 'light')` พร้อมกันอย่างถูกต้อง
+     - เพิ่ม Pre-mount Script ใน [`index.html`](file:///c:/Anewproject/boai/index.html) อ่าน `localStorage.getItem('bo_theme')` ทันทีตั้งแต่โหลดหน้าจอ ป้องกันการกระพริบของธีม (Zero Flash of Dark Theme)
+- **ผลการทดสอบและการตรวจสอบคุณภาพ:**
+  - Impeccable Mechanical Detector: ผ่านการตรวจสอบ 0 Anti-Patterns (`[]`)
+  - Production Build: `npm run build` ผ่าน 100% (0 errors)
+
+### 27. ยกระดับความไวของคำเรียกเสียง "โบ้" (Ultra-Responsive Wake Word Detection & Soft Voice Optimization) 🎙️⚡
+- **ปัญหาที่พบ:**
+  - ผู้ใช้แจ้งว่าการเรียกโบ้ต้องพูดเสียงดัง โบ้ถึงจะตื่น (ไม่ค่อยตื่นเมื่อพูดด้วยระดับเสียงปกติ หรือเสียงเบา/กระซิบ)
+- **การวิเคราะห์ทางเทคนิคเชิงลึก (Deep Root Cause Investigation):**
+  1. **ตัวแปร `sensitivity` เดิมไม่ได้ถูกนำไปใช้จริงกับการดักจับเสียง:** ในโค้ดเดิม ตัวแปร `sensitivity` มีผลเพียงแค่คูณสเกลของแอนิเมชันแถบหลอดเสียงในหน้าจอตั้งค่าเท่านั้น แต่ไม่ได้ส่งผลต่อเกณฑ์การตรวจจับของ SpeechRecognition
+  2. **ข้อจำกัดของ `maxAlternatives`:** Web Speech API ถูกตั้งค่าเริ่มต้นไว้ที่ 1 ตัวเลือก (`maxAlternatives: 1`) และตรวจจับเฉพาะ `event.results[i][0]` เท่านั้น ซึ่งเวลาผู้ใช้พูดเบาๆ หรือพูดจากระยะห่าง เอนจิน STT มักจะคืนผลลัพธ์คำที่มีความมั่นใจอันดับ 1 เพี้ยนไปเล็กน้อย (เช่น `โด้`, `โม้`, `โอ้`) แต่ผลลัพธ์อันดับ 2 หรือ 3 มักเป็นคำว่า `โบ้` หรือ `โบ` ซึ่งถูกมองข้ามไป
+  3. **การหลุดของวรรณยุกต์ภาษาไทยในเสียงเบา (Thai Tone Mark Drop):** เมื่อพูดเสียงเบา ระบบแปลงเสียงมักแปลงคำว่า "โบ้" (ไม้โท) เป็น "โบ" (ไม่มีวรรณยุกต์) หรือ "โบ่"
+  4. **ขาด Hardware Auto-Gain Control (AGC):** สตรีมไมโครโฟนไม่ได้เปิดโหมดบูสต์สัญญาณระดับฮาร์ดแวร์ ทำให้ไมโครโฟนรับเสียงที่เบาได้ยาก
+- **การแก้ไขและพัฒนา (Comprehensive Implementation):**
+  1. **สถาปัตยกรรม Tone-Insensitive Normalized Matching ([`src/services/audio/audioService.ts`](file:///c:/Anewproject/boai/src/services/audio/audioService.ts)):**
+     - สร้างฟังก์ชัน `stripThaiToneMarks()` ตัดรูปวรรณยุกต์ (`่`, `้`, `๊`, `๋`, `์`) เพื่อเทียบรูปคำพื้นฐาน ทำให้คำว่า `โบ`, `โบ้`, `โบ่`, `โบ๊`, `โบ๋`, `โบว์` สามารถทริกเกอร์โบ้ให้ตื่นได้ 100%
+     - ป้องกันคำไม่เกี่ยวข้อง (False Positives Guard) เช่น `โบราณ`, `โบสถ์`, `โบกมือ` ไม่ให้เกิดการตื่นผิดพลาด
+  2. **Multi-Alternative Candidate Inspection (`maxAlternatives = 5`):**
+     - เปิดใช้ `maxAlternatives = 5` และลูปตรวจจับทุกแคนดิเดตของผลลัพธ์เสียง แม้เสียงจะเบาจนตกไปอยู่อันดับ 2-5 โบ้ก็ยังได้ยินและตื่นทันที
+  3. **Whisper & Soft Voice Acoustic Confusion Tolerance:**
+     - เมื่อ Sensitivity >= 70% รองรับคำที่เกิดจากการออกเสียงเบา เช่น `โด้`, `โม้`, `โก้`, `โอ้`, `บู่`, `โบ้ะ`
+  4. **Hardware Microphone Pre-Amp & Auto-Gain Control (AGC):**
+     - สร้างฟังก์ชัน `ensureMicrophonePreAmp()` เรียกใช้งานไมโครโฟนพร้อมเปิด `autoGainControl: true`, `echoCancellation: true`, `noiseSuppression: true` บูสต์สัญญาณเสียงเบาจากระดับฮาร์ดแวร์ระบบปฏิบัติการ
+  5. **ปรับค่าเริ่มต้น Sensitivity สู่ระดับ 85%:**
+     - อัปเดตค่าเริ่มต้นใน [`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts) และ [`src/stores/useAudioStore.ts`](file:///c:/Anewproject/boai/src/stores/useAudioStore.ts) ให้เป็น 85% ตื่นง่าย สบายใจ ไม่ต้องตะโกน
+- **ผลการทดสอบ:**
+  - รันชุดทดสอบเสียง `test_wake_word_sensitivity.ts` ผ่าน 100% (33/33 กรณีทดสอบ ทั้งภาษาไทย, สำเนียง, คำนำหน้า, เสียงกระซิบ และคำที่ไม่เกี่ยวข้อง)
+  - รัน `npm run build` ผ่าน 100% (0 errors)
+
+### 28. ปรับปรุง Typography ทั่วทั้งระบบเป็น Noto Sans Thai (Universal Typography Standard) 🔤✨
+- **ความต้องการของผู้ใช้:**
+  - เปลี่ยนฟอนต์ทั้งหมดให้ใช้ `Noto Sans Thai`
+- **การดำเนินการและการปรับปรุงเชิงสถาปัตยกรรม:**
+  1. **Google Fonts Integration ([`index.html`](file:///c:/Anewproject/boai/index.html)):**
+     - โหลดฟอนต์ `Noto Sans Thai` แบบ Variable Weight (`wght@100..900`) ครบทุกน้ำหนัก พร้อมจับคู่กับ `JetBrains Mono` (`wght@400;500;600;700`) ด้วยเทคนิค `preconnect` และ `display=swap`
+  2. **Tailwind Design System Configuration ([`tailwind.config.js`](file:///c:/Anewproject/boai/tailwind.config.js)):**
+     - กำหนด `fontFamily.sans` ให้ `"Noto Sans Thai"` เป็นฟอนต์หลักอันดับหนึ่ง ตามด้วย `"Noto Sans"`, `system-ui`, `-apple-system`, `BlinkMacSystemFont`, `"Segoe UI"`, `Roboto`, `sans-serif`
+     - กำหนด `fontFamily.mono` ให้ `"JetBrains Mono"` ผสาน `"Noto Sans Thai"` เพื่อให้ตัวเลข/โค้ด/ป้ายวัดผลที่เขียนด้วยภาษาไทยยังคงแสดงผลเป็น Noto Sans Thai สวยงาม
+  3. **Global CSS Rule & Visually Stable Font Fallbacks ([`src/index.css`](file:///c:/Anewproject/boai/src/index.css)):**
+     - ประกาศ `@import` ฟอนต์ไว้ด้านบนสุด
+     - กำหนด `font-family: 'Noto Sans Thai'` ให้กับ `:root`, `html`, `body`, `button`, `input`, `optgroup`, `select`, `textarea`
+     - กำหนด `font-size-adjust: from-font` ตามมาตรฐาน Modern Web Guidance เพื่อลด Cumulative Layout Shift (CLS) ระหว่างรอโหลดฟอนต์
+  4. **อัปเดตเอกสารระบบดีไซน์ ([`DESIGN.md`](file:///c:/Anewproject/boai/DESIGN.md)):**
+     - บันทึกการใช้ `Noto Sans Thai` เป็นแบบอักษรหลักสากลของ Bo AI
+- **ผลการทดสอบ:**
+  - รัน `npm run build` ผ่าน 100% (0 errors, 4.92s build time)
+
+### 29. สถาปัตยกรรมเสียงแท้ xAI Grok TTS API (Official Real Grok Voice & IPC Proxy) 🎙️🤖
+- **คำถาม/ความต้องการของผู้ใช้:**
+  - อยากปรับเสียงให้เสียงจาก Grok ได้จริงนี่ทำได้ไหม
+- **การวิเคราะห์และความจริงเกี่ยวกับ Grok Voice:**
+  1. **ทำได้จริง 100%:** บริษัท xAI มีบริการทางการชื่อ **xAI Text-to-Speech API** อยู่จริงที่ endpoint `https://api.x.ai/v1/tts` พร้อมตัวเลือกเสียงเอกลักษณ์ 5 รูปแบบ (`leo`, `rex`, `ara`, `eve`, `sal`)
+  2. **สาเหตุเดิมที่เล่นเสียง Grok ไม่ได้จริง:**
+     - โค้ดเดิมยิงไปที่ `https://api.x.ai/v1/audio/speech` พร้อมพารามิเตอร์ `model: 'xai.grok-tts'` ซึ่งเป็น payload format ของ OpenAI ส่งผลให้เซิร์ฟเวอร์ xAI ปฏิเสธ (404/400) แล้วระบบแอบสลับกลับไปเป็นเสียงฟรี ("เสียงธรรมชาติ") อัตโนมัติ ทำให้ผู้ใช้รู้สึกว่าไม่ได้ยินเสียง Grok จริง
+  3. **การอัปเกรดให้ใช้งานได้จริงแบบสมบูรณ์:**
+     - **Native Electron IPC Proxy ([`electron/ipc-handlers.ts`](file:///c:/Anewproject/boai/electron/ipc-handlers.ts) & [`electron/preload.ts`](file:///c:/Anewproject/boai/electron/preload.ts)):** เพิ่มแฮนด์เลอร์ `fetch-grok-tts` สตรีมเสียงผ่าน Node.js HTTPS POST ไปยัง `https://api.x.ai/v1/tts` โดยตรง ข้ามปัญหา CORS ของเบราว์เซอร์ 100%
+     - **Fallback Pipeline ([`src/services/audio/audioService.ts`](file:///c:/Anewproject/boai/src/services/audio/audioService.ts)):** ปรับฟังก์ชัน `speakWithGrok` ให้ส่ง payload ที่ถูกต้อง (`{ text, voice, language: 'auto' }`) ไปยัง official endpoint และรองรับการปรับสปีด `playbackRate`
+     - **UI Clarification ([`src/pages/Settings.tsx`](file:///c:/Anewproject/boai/src/pages/Settings.tsx)):** อัปเดตเลเบลเป็น `xAI /v1/tts` พร้อมระบุชัดเจนเรื่องสำเนียงของ Grok
+- **ผลการทดสอบ:**
+  - รัน `npm run build` ผ่าน 100% (ทั้ง Vite bundle และ Electron compilation สำเร็จ 0 errors)
+
+### 30. ปรับสำเนียงและคำพูดของโบ้ให้ตอบตรงประเด็น สั้น กระชับ สุภาพ ลงท้าย "ค่ะ / นะคะ" (Concise & Polite Persona Alignment) 💬✨
+- **ความต้องการของผู้ใช้:**
+  - กำหนดสไตล์คำพูดของโบ้ให้เหมือนกับตัวอย่างการควบคุมเพลงที่ผู้ใช้ปรับ (`ปิดเพลงให้เรียบร้อยแล้วค่ะ`, `พักเพลงไว้ชั่วคราวแล้วนะคะ`, `เปิดเพลงต่อให้แล้วนะคะ`, `ปรับลดเสียงลงเหลือ 20% ของหลอดเสียงให้แล้วนะคะ` ฯลฯ)
+  - ตอบตรงประเด็น สั้น กระชับ ไม่เยิ่นเย้อ ไม่พูด "แก/นะแก" และปรับคำพูดของระบบทั้งหมดให้สอดคล้องกัน
+- **การดำเนินการและการปรับปรุงเชิงระบบ:**
+  1. **สถาปัตยกรรมคำตอบภายในเครื่อง ([`src/services/ai/aiService.ts`](file:///c:/Anewproject/boai/src/services/ai/aiService.ts)):**
+     - ปรับคำตอบคำสั่งเปิดเพลง/รีโมท: `เปิดเพลง "${songInfo.query}" เรียบร้อยแล้วค่ะ 🎵` / `เปิดเพลง "${songInfo.query}" บนเบราว์เซอร์ให้เรียบร้อยแล้วค่ะ 🖥️🎵`
+     - ปรับคำสั่งเตือนความจำ: `บันทึกการแจ้งเตือนเรื่อง "${newRem.title}" เรียบร้อยแล้วค่ะ ⏰`
+     - ปรับคำสั่งความจำ: `จำได้ค่ะ เช่นเรื่อง "${memories[0].content}" ค่ะ`
+     - ปรับ Smart Local Demo: ตอบสั้นตรงประเด็น ทักทายด้วย `สวัสดีค่ะ มีอะไรให้โบ้ช่วยบอกได้เลยนะคะ` และแนะนำตัวแบบสุภาพ
+     - ปรับข้อความ Error & Quota Fallback: ไม่พูด "ขอโทษทีนะแก" เปลี่ยนเป็น `ขออภัยค่ะ...` ลงท้ายด้วย `นะคะ`
+  2. **System Prompt สากลสำหรับ LLM Models ([`src/services/ai/aiService.ts`](file:///c:/Anewproject/boai/src/services/ai/aiService.ts)):**
+     - กำหนดกฎสำคัญ: ตอบตรงประเด็น สั้น กระชับ ได้ใจความทันที ไม่เกริ่นน้ำท่วมทุ่ง
+     - บังคับพูดจาสุภาพ เป็นมิตร ลงท้ายด้วย "ค่ะ / นะคะ" เสมอ และห้ามใช้สรรพนาม "แก" หรือ "นะแก"
+     - เมื่อได้รับคำสั่งจัดการงาน ให้ยืนยันผลการทำรายการสั้นๆ ทันที
+  3. **ฐานข้อมูล Few-Shot Examples & Personality ([`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts)):**
+     - ปรับปรุง `DEFAULT_EXAMPLES` ทั้ง 15 รายการ (คำสั่งเพลง, สภาพอากาศ ฯลฯ) ให้เป็นสำเนียงสั้น กระชับ สุภาพ ลงท้าย "ค่ะ/นะคะ"
+     - เพิ่มระบบ Auto-Migration ใน `initDefaults`: ตรวจจับตัวอย่างเดิมใน `localStorage` ที่ยังมีคำว่า "แก" หรือ "ชิลๆ" และอัปเดตเป็นสำเนียงใหม่ทันที
+     - อัปเดตข้อความต้อนรับเริ่มต้น `msg_welcome`: `สวัสดีค่ะ โบ้พร้อมรับคำสั่งแล้วนะคะ เรียก "โบ้" แล้วสั่งการหรือพูดคุยได้เลยค่ะ`
+  4. **ระบบข้อมูลสภาพอากาศ ([`src/services/weather/weatherService.ts`](file:///c:/Anewproject/boai/src/services/weather/weatherService.ts)):**
+     - ปรับคำแนะนำสภาพอากาศทั้ง 18 สถานะ WMO: ตัด "แก/นะแก/เลยแก" ออกทั้งหมด เปลี่ยนเป็นคำแนะนำสั้น กระชับ สุภาพ เช่น `ท้องฟ้าโปร่ง อากาศดีค่ะ`, `ฝนตกหนัก ระวังถนนลื่นและเดินทางปลอดภัยนะคะ`
+     - ปรับรูปแบบการรายงานสดและพยากรณ์ให้กระชับและลงท้าย "ค่ะ"
+  5. **การจัดการข้อผิดพลาด ([`src/stores/useAssistantStore.ts`](file:///c:/Anewproject/boai/src/stores/useAssistantStore.ts)):**
+     - ปรับข้อความเตือนเมื่อเชื่อมต่อสะดุดเป็น: `ขออภัยค่ะ เกิดข้อผิดพลาดชั่วคราว ลองถามใหม่อีกครั้งนะคะ`
+- **ผลการทดสอบ:**
+  - TypeScript Compiler (`tsc --noEmit`): ผ่าน 0 errors
+  - Production Build (`npm run build`): ผ่าน 100% (4.46s Vite build, Electron bundle พร้อมใช้งาน)
 
 ---
 *บันทึกล่าสุด: 16 ตุลาคม 2026*

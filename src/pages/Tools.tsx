@@ -257,7 +257,7 @@ export const Tools: React.FC = () => {
             <button
               onClick={handleAddReminder}
               disabled={!newReminderTitle.trim()}
-              className="px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-medium"
+              className="px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
