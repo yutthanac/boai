@@ -115,6 +115,84 @@ const ttsPlugin: Plugin = {
       res.statusCode = 404;
       res.end('Not found');
     });
+
+    // LINE Message Dispatcher Proxy (bypasses browser CORS completely)
+    server.middlewares.use('/api/line/send', (req, res) => {
+      if (req.method !== 'POST') {
+        res.statusCode = 405;
+        res.end('Method Not Allowed');
+        return;
+      }
+
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        try {
+          const { token, to, message, broadcastIfNoTo } = JSON.parse(body || '{}');
+          if (!token || !message) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: 'Missing token or message' }));
+            return;
+          }
+
+          const useBroadcast = !to && broadcastIfNoTo;
+          const targetUrl = useBroadcast
+            ? 'https://api.line.me/v2/bot/message/broadcast'
+            : 'https://api.line.me/v2/bot/message/push';
+
+          const payload = useBroadcast
+            ? { messages: [{ type: 'text', text: message }] }
+            : { to, messages: [{ type: 'text', text: message }] };
+
+          const payloadStr = JSON.stringify(payload);
+
+          const lineReq = https.request(targetUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'Content-Length': Buffer.byteLength(payloadStr),
+            },
+            timeout: 10000,
+          }, (lineRes) => {
+            let resData = '';
+            lineRes.on('data', chunk => resData += chunk);
+            lineRes.on('end', () => {
+              const isOk = lineRes.statusCode && lineRes.statusCode >= 200 && lineRes.statusCode < 300;
+              res.statusCode = lineRes.statusCode || 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                success: isOk,
+                statusCode: lineRes.statusCode,
+                data: resData,
+                error: isOk ? undefined : `LINE API HTTP ${lineRes.statusCode}: ${resData.slice(0, 250)}`
+              }));
+            });
+          });
+
+          lineReq.on('error', (err) => {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          });
+
+          lineReq.on('timeout', () => {
+            lineReq.destroy();
+            res.statusCode = 504;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: 'Request timeout to LINE API' }));
+          });
+
+          lineReq.write(payloadStr);
+          lineReq.end();
+        } catch (e: any) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: e.message }));
+        }
+      });
+    });
   }
 };
 

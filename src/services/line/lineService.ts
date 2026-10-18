@@ -223,34 +223,42 @@ export class LineService {
         };
       }
 
-      // 2. Browser Fetch fallback (via proxy or direct)
-      const targetUrl = userId
-        ? 'https://api.line.me/v2/bot/message/push'
-        : 'https://api.line.me/v2/bot/message/broadcast';
-
-      const payload = userId
-        ? { to: userId, messages: [{ type: 'text', text }] }
-        : { messages: [{ type: 'text', text }] };
-
-      const resp = await fetch(targetUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
+      // 2. Browser Fetch fallback (via proxy to avoid browser CORS restrictions)
+      let resp: Response;
+      const proxyPayload = JSON.stringify({
+        token,
+        to: userId || undefined,
+        message: text,
+        broadcastIfNoTo: true,
       });
 
-      if (!resp.ok) {
-        const errJson = await resp.json().catch(() => ({}));
-        if (resp.status === 401) {
+      try {
+        resp = await fetch('/api/line/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: proxyPayload,
+        });
+      } catch {
+        // Fallback to standalone webhook server on port 3000
+        resp = await fetch('http://localhost:3000/api/line/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: proxyPayload,
+        });
+      }
+
+      const result = await resp.json().catch(() => ({}));
+
+      if (!resp.ok || !result.success) {
+        const errorMsg = result.error || `HTTP ${resp.status}`;
+        if (resp.status === 401 || errorMsg.includes('401') || token.length <= 40) {
           return {
             success: false,
             error: '401 Unauthorized',
-            message: `ส่งไม่สำเร็จเนื่องจากรหัส Token ไม่ถูกต้องค่ะ หากรหัสที่คุณระบุคือ Channel Secret (32 หลัก) กรุณาเข้าไปที่ LINE Developers Console ในแท็บ Messaging API แล้วกดปุ่ม Issue ตรง Channel access token (long-lived) แล้วนำมาใส่ในหน้าตั้งค่านะคะ`,
+            message: `ส่งไม่สำเร็จเนื่องจากรหัส Token ไม่ถูกต้อง (401) ค่ะ รหัสที่คุณระบุ (${token.slice(0, 8)}...) คือ Channel Secret (32 หลัก) ซึ่งใช้รับ Webhook เท่านั้น หากต้องการส่งข้อความออก ให้เข้าไปที่ LINE Developers Console ในแท็บ Messaging API เลื่อนลงล่างสุดแล้วกดปุ่ม Issue ตรง Channel access token (long-lived) แล้วนำ Token ตัวยาวมาใส่นะคะ`,
           };
         }
-        throw new Error(errJson.message || `HTTP ${resp.status}`);
+        throw new Error(errorMsg);
       }
 
       return {

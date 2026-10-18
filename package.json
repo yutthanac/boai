@@ -10,7 +10,8 @@
     "build:electron": "tsc electron/main.ts electron/ipc-handlers.ts electron/preload.ts electron/tray.ts electron/line-webhook.ts --outDir dist-electron --module commonjs --target es2020 --esModuleInterop --skipLibCheck",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
-    "electron:build": "npm run build && electron-builder"
+    "electron:build": "npm run build && electron-builder",
+    "webhook": "node scripts/line-webhook.js"
   },
   "keywords": [
     "ai",
