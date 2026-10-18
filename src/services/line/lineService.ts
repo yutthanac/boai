@@ -140,7 +140,7 @@ export class LineService {
 
     let messageText = `[ตารางงานและการแจ้งเตือน - ${targetDateStr}]\n`;
     messageText += `จาก: โนอา (Noar AI Assistant)\n`;
-    messageText += `------------------------------------\n`;
+    messageText += `--------------------------------\n`;
 
     if (pendingList.length > 0) {
       messageText += `\n[รายการที่ต้องทำ (${pendingList.length} รายการ)]:\n`;
@@ -162,7 +162,7 @@ export class LineService {
 
     const currentHours = String(now.getHours()).padStart(2, '0');
     const currentMins = String(now.getMinutes()).padStart(2, '0');
-    messageText += `\n------------------------------------\n`;
+    messageText += `\n--------------------------------\n`;
     messageText += `ส่งเมื่อ: ${now.getDate()} ${thaiMonths[now.getMonth()]} เวลา ${currentHours}:${currentMins} น.`;
 
     return {
@@ -209,7 +209,7 @@ export class LineService {
             success: true,
             count: items.length,
             dateLabel,
-            message: `โนอาส่งตารางงานของ${dateLabel} (${items.length} รายการ) ไปที่ LINE OA ให้เรียบร้อยแล้วค่ะ`,
+            message: `โนอาส่งตารางงานของ${dateLabel} (${items.length} รายการ)wwwwwwwwwwwwwwwwwwเรียบร้อยแล้วค่ะ`,
           };
         }
 

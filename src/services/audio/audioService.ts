@@ -18,7 +18,7 @@ export class AudioService {
   private commandCapturedCallbacks: Array<(command: string) => void> = [];
   private interimSpeechCallbacks: Array<(text: string) => void> = [];
   private currentWakeWord = 'โนอา';
-  private alternateWakeWords: string[] = ['โนอา', 'น้องโนอา', 'ไอ้โนอา', 'คุณโนอา', 'โนอาห์', 'noar', 'noah', 'Hey Noar', 'โบ้', 'น้องโบ', 'Bo AI'];
+  private alternateWakeWords: string[] = ['โนอา', 'น้องโนอา', 'ไอ้โนอา', 'คุณโนอา', 'โนอาห์', 'noar', 'noah', 'Hey Noar'];
   private sensitivity = 75; // 0-100
   private preAmpStream: MediaStream | null = null;
 
@@ -35,7 +35,11 @@ export class AudioService {
 
   public setWakeWords(primary: string, alternates: string[], sensitivity = 75) {
     this.currentWakeWord = primary.toLowerCase().trim();
-    const alts = [...alternates];
+    const boKeywords = ['โบ้', 'ไอ้โบ้', 'น้องโบ', 'bo ai', 'boai', 'โบว์', 'โบ', 'ไอโบ้', 'บักโบ้', 'hey bo'];
+    // Filter out any Bo keywords that might have been passed
+    const alts = alternates.filter(
+      w => !boKeywords.some(b => w.toLowerCase().trim() === b.toLowerCase().trim() || w.toLowerCase().includes('โบ้') || w.toLowerCase().includes('bo ai'))
+    );
     
     // Auto add comprehensive natural Thai greetings, tone variants, and phonetic forms for Noar / โนอา
     alts.push(
@@ -50,10 +54,7 @@ export class AudioService {
       'ฮัลโหลโนอา', 'ฮัลโหลโนอาห์',
       'โนอาครับ', 'โนอาค่ะ', 'โนอาคะ', 'โนอาจ๋า', 'โนอาเอ้ย', 'โนอาเอย',
       'noar', 'noah', 'noa', 'nora',
-      'hey noar', 'hey noah', 'hi noar', 'hi noah', 'hello noar', 'ok noar',
-      // Backward compatibility for previous calls
-      'โบ', 'โบ้', 'โบว์', 'โบ้ะ', 'โบบ',
-      'ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'Bo AI', 'boai', 'hey bo'
+      'hey noar', 'hey noah', 'hi noar', 'hi noah', 'hello noar', 'ok noar'
     );
     
     this.alternateWakeWords = Array.from(new Set(alts.map(w => w.toLowerCase().trim()).filter(Boolean)));
@@ -87,7 +88,7 @@ export class AudioService {
 
     // Guard against common Thai non-name words (e.g. โบราณ, โน้ตบุ๊ก, โน้ต, โนเนม)
     const nonWakeWordsRegex = /(?:โบราณ|โบสถ์|โบกมือ|โบก|โบรก|โบว์ลิ่ง|โน้ต|โน๊ต|โน้ตบุ๊ก|โน๊ตบุ๊ค|โนเนม|โนลิมิต|โนคอมเมนต์)/i;
-    if (nonWakeWordsRegex.test(raw) && !raw.includes('โนอา') && !raw.includes('ไอ้โบ้') && !raw.includes('น้องโบ')) {
+    if (nonWakeWordsRegex.test(raw) && !raw.includes('โนอา')) {
       return { matched: false, matchedWord: '' };
     }
 
@@ -99,19 +100,17 @@ export class AudioService {
     for (const w of wordsToMatch) {
       const wLower = w.toLowerCase();
       if (raw.includes(wLower)) {
-        if (wLower === 'โบ' && /(?:โบราณ|โบสถ์|โบก)/i.test(raw)) continue;
         return { matched: true, matchedWord: w };
       }
       const wStripped = this.stripThaiToneMarks(wLower);
       if (stripped.includes(wStripped)) {
-        if (wStripped === 'โบ' && /(?:โบราณ|โบสถ์|โบก)/i.test(stripped)) continue;
         return { matched: true, matchedWord: w };
       }
     }
 
     // 2. High sensitivity regex matching (sensitivity >= 50)
     if (this.sensitivity >= 50) {
-      const conversationalRegex = /(?:ไอ้|ไอ|น้อง|พี่|น้า|บัก|คุณ|เฮ้ย|เฮ้|ฮัลโหล|เจ้า|ฮัลโล)?\s*(?:โน[อวฮ][าห์่้๊๋]?|โนอาร์|โนอาห์|noar|noah|noa|nora|โ[บพ][้่๊๋์]?|โบว์|bo)(?:$|\s|[ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย|วัน|ตอน])/i;
+      const conversationalRegex = /(?:ไอ้|ไอ|น้อง|พี่|น้า|บัก|คุณ|เฮ้ย|เฮ้|ฮัลโหล|เจ้า|ฮัลโล)?\s*(?:โน[อวฮ][าห์่้๊๋]?|โนอาร์|โนอาห์|noar|noah|noa|nora)(?:$|\s|[ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย|วัน|ตอน])/i;
       if (conversationalRegex.test(raw) || conversationalRegex.test(stripped)) {
         const match = raw.match(conversationalRegex) || stripped.match(conversationalRegex);
         return { matched: true, matchedWord: match ? match[0].trim() : 'โนอา' };
@@ -119,10 +118,8 @@ export class AudioService {
     }
 
     // 3. Ultra sensitivity soft-voice & whisper acoustic confusion (sensitivity >= 70)
-    // When whispering or speaking softly from a distance, Thai STT frequently mis-transcribes "โนอา" / "โบ้" as:
-    // "โลอา", "โอนา", "โนวา", "โนฮา", "โมอา", "โงอา", "โด้", "โม้", "โก้", "โอ้"
     if (this.sensitivity >= 70) {
-      const whisperRegex = /^(?:ไอ้|น้อง|บัก|เฮ้|เฮ้ย)?\s*(?:โน[อวฮ][าห์่้๊๋]?|โลอา|โอนา|โนวา|โนฮา|โมอา|โงอา|โ[ด้ม้ก้อ้ม่ผ่]|บู่|บอส|บ๊อบ|บ๊วย|โบ้ะ|โป๊ะ)\s*(?:ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย)?/i;
+      const whisperRegex = /^(?:ไอ้|น้อง|บัก|เฮ้|เฮ้ย)?\s*(?:โน[อวฮ][าห์่้๊๋]?|โลอา|โอนา|โนวา|โนฮา|โมอา|โงอา|โป๊ะ)\s*(?:ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย)?/i;
       if (whisperRegex.test(raw)) {
         const match = raw.match(whisperRegex);
         return { matched: true, matchedWord: match ? match[0].trim() : 'โนอา' };

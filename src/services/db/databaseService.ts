@@ -31,7 +31,7 @@ const STORAGE_KEYS = {
 
 const DEFAULT_SETTINGS: AppSettings = {
   wake_word: 'โนอา',
-  alternate_names: ['น้องโนอา', 'ไอ้โนอา', 'คุณโนอา', 'โนอาห์', 'Noar', 'Noar AI', 'Hey Noar', 'ไอ้โบ้', 'น้องโบ', 'โบ้', 'Bo AI'],
+  alternate_names: ['น้องโนอา', 'ไอ้โนอา', 'Noar'],
   sensitivity: 75,
   always_listening: true,
   llm_provider: 'gemini',
@@ -333,11 +333,11 @@ export class DatabaseService {
         if (!parsed.tts_rate || parsed.tts_rate <= 1.05) {
           parsed.tts_rate = 1.20;
         }
-        parsed.alternate_names = Array.from(new Set([
-          'น้องโนอา', 'ไอ้โนอา', 'คุณโนอา', 'โนอาห์', 'Noar', 'Noar AI', 'Hey Noar',
-          ...(parsed.alternate_names || []).filter((n: string) => !['โบ้', 'โนอา'].includes(n)),
-          'ไอ้โบ้', 'น้องโบ', 'โบ้', 'Bo AI'
-        ]));
+        const boKeywords = ['โบ้', 'ไอ้โบ้', 'น้องโบ', 'bo ai', 'boai', 'โบว์', 'โบ', 'ไอโบ้', 'บักโบ้', 'hey bo'];
+        const cleanedAlts = (parsed.alternate_names || []).filter(
+          (n: string) => !boKeywords.some(b => n.toLowerCase().trim() === b.toLowerCase().trim() || n.toLowerCase().includes('โบ้') || n.toLowerCase().includes('bo ai')) && n !== 'โนอา'
+        );
+        parsed.alternate_names = cleanedAlts.length > 0 ? cleanedAlts.slice(0, 3) : ['น้องโนอา', 'ไอ้โนอา', 'Noar'];
         this.saveSettings(parsed);
       } catch (_) {}
     }
@@ -418,6 +418,15 @@ export class DatabaseService {
       const parsed = JSON.parse(raw);
       if (!parsed.gemini_model || parsed.gemini_model === 'gemini-3.6-flash') {
         parsed.gemini_model = 'gemini-flash-lite-latest';
+      }
+      if (parsed.alternate_names) {
+        const boKeywords = ['โบ้', 'ไอ้โบ้', 'น้องโบ', 'bo ai', 'boai', 'โบว์', 'โบ', 'ไอโบ้', 'บักโบ้', 'hey bo'];
+        parsed.alternate_names = parsed.alternate_names.filter(
+          (n: string) => !boKeywords.some(b => n.toLowerCase().trim() === b.toLowerCase().trim() || n.toLowerCase().includes('โบ้') || n.toLowerCase().includes('bo ai'))
+        );
+        if (parsed.alternate_names.length === 0) {
+          parsed.alternate_names = ['น้องโนอา', 'ไอ้โนอา', 'Noar'];
+        }
       }
       return { ...DEFAULT_SETTINGS, ...parsed };
     } catch {
@@ -639,6 +648,9 @@ export class DatabaseService {
 
   public saveExamples(items: ExampleTrainingItem[]): void {
     localStorage.setItem(STORAGE_KEYS.EXAMPLES, JSON.stringify(items));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('noar-examples-updated', { detail: { items } }));
+    }
   }
 
   public addExample(user_query: string, expected_response: string, notes?: string, category = 'general'): ExampleTrainingItem {

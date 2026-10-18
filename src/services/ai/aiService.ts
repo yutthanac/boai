@@ -351,8 +351,8 @@ ${tuning.conciseness >= 75
   }> {
     const latestUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
 
-    // 1. Tool execution check first (Quick intent matching: weather, music, reminders)
-    const toolResult = await this.tryExecuteToolIntent(latestUserMessage);
+    // 1. Tool execution check first (Quick intent matching: weather, music, reminders, voice training)
+    const toolResult = await this.tryExecuteToolIntent(latestUserMessage, messages);
     if (toolResult) {
       return { content: this.stripEmojisAndStickers(toolResult) };
     }
@@ -762,7 +762,7 @@ ${tuning.conciseness >= 75
   }
 
   // Quick intent & Tool dispatcher
-  public async tryExecuteToolIntent(text: string): Promise<string | null> {
+  public async tryExecuteToolIntent(text: string, messages?: ChatMessage[]): Promise<string | null> {
     const lower = text.toLowerCase();
 
     // 0. Real-time Local Clock & Date (100% accurate, no hallucination)
@@ -912,8 +912,19 @@ ${tuning.conciseness >= 75
       return `เปิดเพลง "${songInfo.query}" เรียบร้อยแล้วค่ะ`;
     }
 
+    // 3.5 Voice Training & Direct Learning Intent (Few-Shot Training via Voice / Contextual Learning)
+    const voiceTrainingResult = this.detectVoiceTrainingIntent(text, messages);
+    if (voiceTrainingResult) {
+      const { query, expectedResponse, notes } = voiceTrainingResult;
+      const newEx = db.addExample(query, expectedResponse, notes, 'voice_training');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('noar-examples-updated', { detail: { item: newEx } }));
+      }
+      return `โนอาเรียนรู้และบันทึกการเทรนเรียบร้อยแล้วค่ะ ต่อไปนี้ถ้าคุณพูดหรือถามว่า "${query}" โนอาจะตอบว่า "${expectedResponse}" ทันทีค่ะ`;
+    }
+
     // 4. Memory Save Intent (Explicit Memory Recording)
-    const memorySaveMatch = text.match(/(?:ช่วยจำว่า|จำไว้ว่า|จำไว้นะว่า|จำไว้|จำว่า|บันทึกไว้ว่า|บันทึกว่า|จดไว้ว่า|จดว่า|จำข้อมูลว่า|บันทึกข้อมูลว่า)\s*(.+)/i);
+    const memorySaveMatch = text.match(/(?:ช่วยจำว่า|จำไว้ว่า|จำไว้นะว่า|จำไว้|จำว่า|บันทึกไว้ว่า|บันทึกว่า|จดไว้ว่า|จดว่า|จำข้อมูลว่า|บันทึกข้อมูลว่า|สอนโนอาว่า|สอนว่า|ให้เรียนรู้ว่า)\s*(.+)/i);
     if (memorySaveMatch) {
       const factToSave = memorySaveMatch[1].trim();
       if (factToSave.length >= 2) {
@@ -1138,8 +1149,10 @@ ${tuning.conciseness >= 75
     // 6.9 Save / Record Reminders & Work Schedule (Standardized extraction: งานอะไร, เมื่อไหร่, ที่ไหน)
     const isScheduleSave = (
       /(?:บันทึก.*ให้หน่อย|ช่วยเตือนว่า|ช่วยเตือน|เตือนให้หน่อย|ตั้งเตือนว่า|ตั้งเตือน|บันทึกเตือน|บันทึกตารางงาน|จัดตารางงาน|จัดตารางเวลา|จัดตาราง|ลงตารางงาน|ลงตาราง|เพิ่มตารางงาน|เพิ่มในตารางงาน|บันทึกในตารางงาน|ใส่ในตารางงาน|บันทึกนัด|เตือนฉันตอน|เตือนตอน|เตือนเราตอน|ช่วยบันทึก|บันทึกการแจ้งเตือน|บันทึกนัดหมาย|เตือนว่า)/i.test(text) ||
-      /(?:บันทึกว่า|ลงนัดว่า|ลงตารางว่า)\s*(.+)/i.test(text)
-    );
+      /(?:บันทึกว่า|ลงนัดว่า|ลงตารางว่า)\s*(.+)/i.test(text) ||
+      /^(?:บันทึก|ช่วยบันทึก|ลงตาราง|เตือน)\s+/i.test(text) ||
+      /(?:เวลา|ช่วงเวลา|ตอน)\s+[\u0E00-\u0E7Fa-zA-Z0-9.:\s]+\s*(?:ถึง|-|จนถึง)\s*[\u0E00-\u0E7Fa-zA-Z0-9.:\s]+/i.test(text)
+    ) && !/(?:กี่โมง|เวลาตอนนี้|นาฬิกา|เวลาเท่าไหร่|เวลาเท่าไร|วันอะไร|วันที่เท่าไหร่|วันนี้วันอะไร|time|clock)/i.test(text);
 
     if (isScheduleSave) {
       const { what, when, where } = this.extractScheduleDetails(text);
@@ -1166,13 +1179,11 @@ ${tuning.conciseness >= 75
 
   // Extract schedule / reminder: What (งานอะไร), When (เมื่อไหร่), Where (ที่ไหน) from natural speech
   private extractScheduleDetails(text: string): { what: string; when: string; where?: string } {
-    let clean = text.trim();
+    let clean = (text || '').trim();
 
     // 1. Remove conversational transition words & filler prefixes
-    // e.g. งั้น, งั้นก็, ถ้าอย่างนั้น, ถ้างั้น, โอเคงั้น, เอางี้, เอาเป็นว่า, สรุป, คือ
     clean = clean.replace(/^(?:โอเค|ok|okay)?\s*(?:งั้นก็|งั้นแหละ|งั้นละ|ถ้างั้น|ถ้าอย่างนั้น|งั้น|เอางี้|เอาเป็นว่า|สรุปว่า|สรุป|คืองี้|คือ|แบบว่า|แบบ|อ่า|เอ่อ|เอ้อ)\s*/gi, '');
     clean = clean.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noar)\s*[,.:;]?\s*/gi, '');
-    clean = clean.replace(/^(?:งั้นก็|ถ้างั้น|ถ้าอย่างนั้น|งั้น|เอางี้|เอาเป็นว่า|สรุปว่า|สรุป|คืองี้|คือ)\s*/gi, '');
     clean = clean.replace(/(?:นะแก|นะจ๊ะ|หน่อยนะ|หน่อยดิ|หน่อยสิ|หน่อยครับ|หน่อยค่ะ|หน่อย|ให้หน่อยนะ|ให้หน่อยครับ|ให้หน่อยค่ะ|ให้หน่อยดิ|ให้หน่อยสิ|ให้หน่อย|ให้เราหน่อย|ให้ฉันหน่อย|ด้วยนะ|ด้วยครับ|ด้วยค่ะ|ด้วย|ได้ไหม|ได้มั้ย|ทีครับ|ทีค่ะ|ที|ซิ|ซี่)$/gi, '');
     clean = clean.replace(/^(?:ช่วย|รบกวน|กรุณา|วาน)?\s*(?:จัดตารางงานว่า|จัดตารางงาน|จัดตารางเวลา|จัดตาราง|บันทึกตารางงานว่า|บันทึกตารางงาน|บันทึกการแจ้งเตือนว่า|บันทึกการแจ้งเตือน|บันทึกนัดว่า|บันทึกนัด|บันทึกเตือนว่า|บันทึกเตือน|บันทึกว่า|บันทึก|ช่วยเตือนว่า|ช่วยเตือน|ตั้งเตือนว่า|ตั้งเตือน|เตือนฉันว่า|เตือนเราว่า|เตือนฉันตอน|เตือนเราตอน|เตือนฉัน|เตือนเรา|เตือนว่า|เตือน|ลงตารางงานว่า|ลงตารางงาน|เพิ่มตารางงานว่า|เพิ่มตารางงาน|ลงนัดว่า|ลงนัด)\s*/gi, '');
 
@@ -1188,70 +1199,123 @@ ${tuning.conciseness >= 75
       what = what.replace(dayMatch[0], ' ');
     }
 
-    // 3. Time Component Patterns & Range Matching (e.g. 1 ทุ่มถึง ตี 2, 19:00 ถึง 02:00 น., บ่าย 2 ถึง บ่าย 4)
-    const detailedTime = `(?:[0-2]?[0-9][.:][0-5][0-9](?:\\s*(?:น\\.|นาฬิกา))?|[0-2]?[0-9]\\s*(?:โมงเช้า|โมงเย็น|โมงครึ่ง|โมง|ทุ่ม|ทุม|น\\.|นาฬิกา)|บ่าย\\s*(?:โมง|สอง|สาม|สี่|[1-4])(?:\\s*(?:โมง|ครึ่ง))?|ตี\\s*(?:[1-5]|หนึ่ง|สอง|สาม|สี่|ห้า)|เที่ยง(?:ตรง|วัน|คืน)?|สองทุ่ม|สามทุ่ม|สี่ทุ่ม|ห้าทุ่ม|หัวค่ำ|เช้าตรู่)`;
+    // 3. Extract Location (Where) safely without matching 'เที่ยง' (เ-ที่-ยง)
+    const locRegex = /(?:^|\s)(?:ที่|ณ)\s*(?!เที่ยง|สุด|แท้|จริง)([\u0E00-\u0E7Fa-zA-Z0-9_\s-]+?)(?=\s+(?:เวลา|ช่วงเวลา|ตอน|ถึง|จนถึง|วัน|$))/i;
+    const locMatch = what.match(locRegex);
+    if (locMatch) {
+      const rawLoc = locMatch[1].trim();
+      if (rawLoc.length > 0 && !/^(?:มี|ต้องทำ|เคย|รัก|เสร็จ|ดี|สุด|จริง|เวลา|ตอน)$/i.test(rawLoc)) {
+        where = rawLoc;
+        what = what.replace(locMatch[0], ' ');
+      }
+    }
+
+    // 4. Time patterns (covering pure digital 19:00, 19.00, 19:00 น., 19:00 น, 1 ทุ่ม, ตี 2, บ่าย 2, เที่ยง, etc.)
+    const detailedTime = `(?:[0-2]?[0-9][.:][0-5][0-9](?:\\s*(?:น\\.|น|นาฬิกา))?|[0-2]?[0-9]\\s*(?:โมงเช้า|โมงเย็น|โมงครึ่ง|โมง|ทุ่ม(?:\\s*ครึ่ง)?|ทุม(?:\\s*ครึ่ง)?|น\\.|น|นาฬิกา)|บ่าย\\s*(?:โมง|สอง|สาม|สี่|[1-4])(?:\\s*(?:โมง|ครึ่ง))?|ตี\\s*(?:[1-5]|หนึ่ง|สอง|สาม|สี่|ห้า|[1-5])(?:\\s*(?:โมง|ครึ่ง))?|เที่ยง(?:ตรง|วัน|คืน)?|หนึ่งทุ่ม|สองทุ่ม(?:\\s*ครึ่ง)?|สามทุ่ม(?:\\s*ครึ่ง)?|สี่ทุ่ม(?:\\s*ครึ่ง)?|ห้าทุ่ม(?:\\s*ครึ่ง)?|หกโมง|หัวค่ำ|เช้าตรู่)`;
     const generalTime = `(?:${detailedTime}|เช้า|สาย|บ่าย|เย็น|ค่ำ|ดึก)`;
 
-    const timeRangeRegex = new RegExp(`(?:ตอน|เวลา)?\\s*(${detailedTime})\\s*(?:ถึง|-|จนถึง)\\s*(${detailedTime}(?:\\s*(?:น\\.|นาฬิกา))?)`, 'i');
-    const singleTimeRegex = new RegExp(`(?:ตอน|เวลา)\\s*(${generalTime})|(${detailedTime})`, 'i');
+    // Key user rule: Everything before the word 'เวลา' is the work/task title!
+    // From 'เวลา' onwards is the work time period!
+    const timeKeywordRegex = /(?:^|\s)(?:เวลา|ช่วงเวลา|ตอน)\s+/i;
+    const timeKeywordMatch = what.match(timeKeywordRegex);
 
-    const rangeMatch = what.match(timeRangeRegex);
-    if (rangeMatch) {
-      let t1 = rangeMatch[1].trim();
-      let t2 = rangeMatch[2].trim();
-      if (/^\d{1,2}:\d{2}$/.test(t1)) t1 += ' น.';
-      if (/^\d{1,2}:\d{2}$/.test(t2)) t2 += ' น.';
-      when = (dayPart ? `${dayPart} ` : '') + `${t1} ถึง ${t2}`;
-      what = what.replace(rangeMatch[0], ' ');
-    } else {
-      const singleMatch = what.match(singleTimeRegex);
-      if (singleMatch) {
-        let t = (singleMatch[1] || singleMatch[2]).trim();
-        if (/^\d{1,2}:\d{2}$/.test(t)) t += ' น.';
-        when = (dayPart ? `${dayPart} ` : '') + t;
-        what = what.replace(singleMatch[0], ' ');
-      } else if (dayPart) {
-        when = dayPart;
-      } else {
-        when = 'เร็วๆ นี้';
-      }
-    }
+    if (timeKeywordMatch && timeKeywordMatch.index !== undefined) {
+      const idx = timeKeywordMatch.index;
+      const beforeText = what.substring(0, idx).trim();
+      const afterText = what.substring(idx + timeKeywordMatch[0].length).trim();
 
-    // 4. Extract Location (Where)
-    const locationMatch = what.match(/(?:ที่|ณ)\s*([^,.\n!?]+)/i);
-    if (locationMatch) {
-      const rawLoc = locationMatch[1].trim();
-      const actionRegex = /(กิน|ทาน|นัด|คุย|พบ|ประชุม|เจอ|ส่ง|รับ|ทำ|ไป|ดู|ซื้อ|สัมภาษณ์|หา|ตรวจ|มี|เรียน|สอน)/;
-      const splitMatch = rawLoc.match(actionRegex);
-      if (splitMatch && splitMatch.index && splitMatch.index > 0) {
-        const locOnly = rawLoc.substring(0, splitMatch.index).trim();
-        const restAction = rawLoc.substring(splitMatch.index).trim();
-        where = locOnly;
-        what = what.replace(locationMatch[0], ' ' + restAction + ' ');
-      } else {
-        const words = rawLoc.split(/\s+/);
-        if (words.length > 4) {
-          where = words.slice(0, 3).join(' ');
-          const rest = words.slice(3).join(' ');
-          what = what.replace(locationMatch[0], ' ' + rest + ' ');
+      if (!beforeText || beforeText.length < 2) {
+        // e.g. "เวลา 1 ทุ่ม ถึง ตี 2 สุกี้ตี้น้อย"
+        const rangeReg = new RegExp(`^(${detailedTime})\\s*(?:ถึง|-|จนถึง)\\s*(${detailedTime}(?:\\s*(?:น\\.|น|นาฬิกา))?)\\s*(.*)$`, 'i');
+        const mRange = afterText.match(rangeReg);
+        if (mRange) {
+          when = `${mRange[1].trim()} ถึง ${mRange[2].trim()}`;
+          what = mRange[3].trim();
         } else {
-          where = rawLoc;
-          what = what.replace(locationMatch[0], ' ');
+          const singleReg = new RegExp(`^(${generalTime})\\s*(.*)$`, 'i');
+          const mSingle = afterText.match(singleReg);
+          if (mSingle) {
+            when = mSingle[1].trim();
+            what = mSingle[2].trim();
+          } else {
+            when = afterText;
+            what = '';
+          }
+        }
+      } else {
+        // User says: "[ชื่องาน] เวลา ... ถึง ..."
+        // Everything before "เวลา" is the work name!
+        what = beforeText;
+
+        // Everything after "เวลา" is the time!
+        const rangeReg = new RegExp(`^(${detailedTime})\\s*(?:ถึง|-|จนถึง)\\s*(${detailedTime}(?:\\s*(?:น\\.|น|นาฬิกา))?)`, 'i');
+        const mRange = afterText.match(rangeReg);
+        if (mRange) {
+          when = `${mRange[1].trim()} ถึง ${mRange[2].trim()}`;
+          const rest = afterText.substring(mRange[0].length).trim();
+          if (rest && !where) {
+            const trailingLoc = rest.match(/^(?:ที่|ณ)\s*(.+)$/i);
+            if (trailingLoc) {
+              where = trailingLoc[1].trim();
+            } else {
+              what += ' ' + rest;
+            }
+          }
+        } else {
+          const singleReg = new RegExp(`^(${generalTime})`, 'i');
+          const mSingle = afterText.match(singleReg);
+          if (mSingle) {
+            when = mSingle[1].trim();
+            const rest = afterText.substring(mSingle[0].length).trim();
+            if (rest && !where) {
+              const trailingLoc = rest.match(/^(?:ที่|ณ)\s*(.+)$/i);
+              if (trailingLoc) {
+                where = trailingLoc[1].trim();
+              } else {
+                what += ' ' + rest;
+              }
+            }
+          } else {
+            when = afterText;
+          }
         }
       }
+    } else {
+      // No explicit "เวลา" or "ตอน" keyword: try standard range or single time regex
+      const timeRangeRegex = new RegExp(`(${detailedTime})\\s*(?:ถึง|-|จนถึง)\\s*(${detailedTime}(?:\\s*(?:น\\.|น|นาฬิกา))?)`, 'i');
+      const singleTimeRegex = new RegExp(`(${detailedTime})`, 'i');
 
-      where = where.replace(/^(?:ที่|ณ)\s*/, '').trim();
-      if (/^(?:มี|ต้องทำ|เคย|รัก|เสร็จ|ดี|สุด|จริง)$/i.test(where)) {
-        where = '';
+      const rangeMatch = what.match(timeRangeRegex);
+      if (rangeMatch) {
+        when = `${rangeMatch[1].trim()} ถึง ${rangeMatch[2].trim()}`;
+        what = what.replace(rangeMatch[0], ' ');
+      } else {
+        const singleMatch = what.match(singleTimeRegex);
+        if (singleMatch) {
+          when = singleMatch[1].trim();
+          what = what.replace(singleMatch[0], ' ');
+        }
       }
     }
 
-    // 5. Clean What (Action / Event name) - Thoroughly strip conversational leakages
+    // 5. Clean & Normalize When
+    if (when) {
+      // Add 'น.' to pure digital formats like '19:00' if missing
+      when = when.replace(/\b([0-2]?[0-9][.:][0-5][0-9])(?!\s*น|\s*นาฬิกา)/g, '$1 น.');
+      // Standardize '19:00 น' -> '19:00 น.'
+      when = when.replace(/([0-2]?[0-9][.:][0-5][0-9]\s*น)(?!\.)/g, '$1.');
+      when = (dayPart ? `${dayPart} ` : '') + when.trim();
+    } else if (dayPart) {
+      when = dayPart;
+    } else {
+      when = 'เร็วๆ นี้';
+    }
+
+    // 6. Clean What (Action / Event name) - Thoroughly strip conversational prefixes & leakages
     what = what.replace(/^(?:โอเค|ok|งั้นก็|ถ้างั้น|ถ้าอย่างนั้น|งั้น|เอางี้|เอาเป็นว่า|สรุปว่า|สรุป|คืองี้|คือ|แบบว่า|แบบ|อ่า|เอ่อ|เอ้อ)\s*/gi, '');
     what = what.replace(/^(?:ช่วย|รบกวน|กรุณา|วาน)?\s*(?:จัดตารางงานว่า|จัดตารางงาน|จัดตารางเวลา|จัดตาราง|บันทึกตารางงานว่า|บันทึกตารางงาน|บันทึกการแจ้งเตือนว่า|บันทึกการแจ้งเตือน|บันทึกนัดว่า|บันทึกนัด|บันทึกเตือนว่า|บันทึกเตือน|บันทึกว่า|บันทึก|ช่วยเตือนว่า|ช่วยเตือน|ตั้งเตือนว่า|ตั้งเตือน|เตือนฉันว่า|เตือนเราว่า|เตือนฉันตอน|เตือนเราตอน|เตือนฉัน|เตือนเรา|เตือนว่า|เตือน|ลงตารางงานว่า|ลงตารางงาน|เพิ่มตารางงานว่า|เพิ่มตารางงาน|ลงนัดว่า|ลงนัด)\s*/gi, '');
     what = what.replace(/^(?:มี|จะไป|ไป|เรื่อง|งาน|นัด|สิ่งที่ต้องทำ)\s*/gi, '');
     what = what.replace(/\s*(?:ตอน|เวลา|ที่|ณ|ถึง|จนถึง)\s*$/gi, '');
-    what = what.replace(/\s*(?:นะแก|นะจ๊ะ|หน่อยนะ|หน่อยดิ|หน่อยสิ|หน่อยครับ|หน่อยค่ะ|หน่อย|ให้หน่อยนะ|ให้หน่อยครับ|ให้หน่อยค่ะ|ให้หน่อยดิ|ให้หน่อยสิ|ให้หน่อย|ให้เราหน่อย|ให้ฉันหน่อย|ด้วยนะ|ด้วยครับ|ด้วยค่ะ|ด้วย|ได้ไหม|ได้มั้ย|ทีครับ|ทีค่ะ|ที|ซิ|ซี่)$/gi, '');
     what = what.replace(/\s{2,}/g, ' ').trim();
 
     if (!what || what.length < 2) {
@@ -1263,6 +1327,81 @@ ${tuning.conciseness >= 75
       when: when || 'เร็วๆ นี้',
       where: where || undefined,
     };
+  }
+
+  // Voice Training & Context-Aware Learning from spoken speech
+  public detectVoiceTrainingIntent(
+    text: string,
+    messages?: ChatMessage[]
+  ): { query: string; expectedResponse: string; notes?: string } | null {
+    let clean = (text || '').trim();
+    clean = clean.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noar)\s*[,.:;]?\s*/gi, '');
+    clean = clean.replace(/(?:นะแก|นะจ๊ะ|หน่อยนะ|หน่อยดิ|หน่อยสิ|หน่อยครับ|หน่อยค่ะ|หน่อย|ให้หน่อยนะ|ให้หน่อยครับ|ให้หน่อยค่ะ|ด้วยนะ|ด้วยครับ|ด้วยค่ะ|ด้วย|ได้ไหม|ได้มั้ย)$/gi, '');
+    clean = clean.trim();
+
+    // Find previous user query from conversation history for contextual corrections
+    let previousUserQuery: string | null = null;
+    if (messages && messages.length >= 2) {
+      const userMsgs = messages.filter(m => m.role === 'user');
+      if (userMsgs.length >= 2) {
+        previousUserQuery = userMsgs[userMsgs.length - 2].content;
+        previousUserQuery = previousUserQuery.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noar)\s*[,.:;]?\s*/gi, '').trim();
+      }
+    }
+
+    // Pattern 1: Explicit Q&A Instruction:
+    // e.g. "สอนโนอาว่า ถ้าพูดว่า X ให้ตอบว่า Y", "ถ้าเราถามว่า X ให้ตอบว่า Y", "เทรนว่า ถ้าพูดว่า X ให้ตอบ Y"
+    const qaRegex = /(?:สอนโนอาว่า|สอนว่า|เทรนโนอาว่า|เทรนว่า|ฝึกโนอาว่า|ฝึกว่า|ช่วยจำว่า|จำไว้ว่า)?\s*(?:ถ้า(?:เรา)?(?:พูด|ถาม|สั่ง|บอก)(?:ว่า)?)\s*(.+?)\s*(?:ให้(?:โนอา)?(?:ตอบ(?:กลับ)?|พูด|บอก)(?:ว่า)?)\s*(.+)/i;
+    const qaMatch = clean.match(qaRegex);
+    if (qaMatch) {
+      let q = qaMatch[1].trim().replace(/^["'“‘]|["'”’]$/g, '').trim();
+      let a = qaMatch[2].trim().replace(/^["'“‘]|["'”’]$/g, '').trim();
+      q = q.replace(/^(?:ว่า|คำว่า)\s*/i, '');
+      a = a.replace(/^(?:ว่า|คำว่า)\s*/i, '');
+      if (q.length >= 2 && a.length >= 2) {
+        return {
+          query: q,
+          expectedResponse: a,
+          notes: 'สอนด้วยคำสั่งเสียง (Voice Training): รูปแบบคำถาม-คำตอบ',
+        };
+      }
+    }
+
+    // Pattern 2: Contextual correction / "คำนี้อยากให้โนอาเปลี่ยนให้...", "คำเมื่อกี้อยากให้เปลี่ยนเป็น...", "อยากให้โนอาตอบว่า..."
+    const contextChangeRegex = /^(?:คำนี้|คำเมื่อกี้|คำตอบนี้|คำตอบเมื่อกี้|เมื่อกี้|ที่ตอบเมื่อกี้|อันนี้)?\s*(?:อยากให้(?:โนอา)?(?:ช่วย)?เปลี่ยน(?:ให้)?|ช่วยแก้(?:ให้)?|แก้คำตอบ(?:ให้)?|เปลี่ยนคำตอบ(?:ให้)?|อยากให้(?:โนอา)?ตอบว่า)\s*(?:เป็น|ให้ตอบ(?:ว่า)?|ตอบว่า)?\s*(.+)/i;
+    const contextMatch = clean.match(contextChangeRegex);
+    if (contextMatch && previousUserQuery && previousUserQuery.trim().length >= 2) {
+      let a = contextMatch[1].trim().replace(/^["'“‘]|["'”’]$/g, '').trim();
+      a = a.replace(/^(?:เป็น|ว่า|ให้ตอบว่า|ให้ตอบ|ตอบว่า|ให้)\s*/i, '');
+      a = a.replace(/\s*(?:แทน|นะ|นะคะ|ครับ)$/i, '');
+      if (a.length >= 2) {
+        return {
+          query: previousUserQuery.trim(),
+          expectedResponse: a,
+          notes: 'สอนด้วยคำสั่งเสียง (Contextual Correction): แก้ไขคำตอบล่าสุด',
+        };
+      }
+    }
+
+    // Pattern 3: Explicit replacement specifying target question:
+    // e.g. "อยากให้โนอาเปลี่ยนคำตอบของ [X] ให้ตอบว่า [Y]"
+    const replaceSpecificRegex = /(?:อยากให้(?:โนอา)?(?:ช่วย)?เปลี่ยน(?:คำตอบ)?(?:ของ|เรื่อง)?)\s*(.+?)\s*(?:เป็น|ให้ตอบว่า|ให้เป็น|ให้ตอบ)\s*(.+)/i;
+    const replaceMatch = clean.match(replaceSpecificRegex);
+    if (replaceMatch) {
+      let q = replaceMatch[1].trim().replace(/^["'“‘]|["'”’]$/g, '').trim();
+      let a = replaceMatch[2].trim().replace(/^["'“‘]|["'”’]$/g, '').trim();
+      q = q.replace(/^(?:ว่า|คำว่า|คำถามว่า)\s*/i, '');
+      a = a.replace(/^(?:ว่า|คำว่า|คำตอบว่า)\s*/i, '');
+      if (!/^(?:คำนี้|คำเมื่อกี้|เมื่อกี้|อันนี้|คำตอบนี้|ให้)$/i.test(q) && q.length >= 2 && a.length >= 2) {
+        return {
+          query: q,
+          expectedResponse: a,
+          notes: 'สอนด้วยคำสั่งเสียง (Specific Replacement): เปลี่ยนคำตอบหัวข้อระบุ',
+        };
+      }
+    }
+
+    return null;
   }
 
   // Smart Offline/Local Demo Generator adhering to Personality

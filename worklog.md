@@ -621,7 +621,73 @@
   - Production Build (`npm run build`): ผ่าน 100% (4.46s Vite build, Electron bundle พร้อมใช้งาน)
 
 ---
-*บันทึกล่าสุด: 16 ตุลาคม 2026*
+
+### 31. ระบบสอนโนอาผ่านเสียงพูด, สกัดเวลางานแม่นยำ และถอดชื่อ "โบ้" ออกจากระบบเสียงถาวร 🎙️✨
+- **ความต้องการและการแก้ปัญหา:**
+  1. **สกัดเวลากับชื่องาน "เวลา ... ถึง ...":**
+     - เดิมเมื่อผู้ใช้สั่งบันทึกตารางงานหรือเตือนความจำ เช่น `"สุกี้ตี้น้อย เวลา 1 ทุ่ม ถึง ตี 2"` ระบบมักตัดชื่องานและเวลาคลาดเคลื่อน นำคำบอกเวลาไปรวมกับชื่องาน
+     - **การแก้ไขใน [`src/services/ai/aiService.ts`](file:///c:/Anewproject/boai/src/services/ai/aiService.ts):** ใช้คำว่า `"เวลา" / "ช่วงเวลา" / "ตอน"` เป็นตัวคั่นเด็ดขาด (Strict Delimiter) ข้อความก่อนคำว่าเวลาคือชื่องาน (`what`) และข้อความตั้งแต่คำว่าเวลาเป็นต้นไปคือช่วงเวลา (`when`) พร้อมรองรับรูปแบบเวลาไทยสำเนียงพูด เช่น `1 ทุ่ม ถึง ตี 2`, `ทุ่มครึ่ง`, `19:00 น ถึง 2:00 น` และป้องกันคำว่า `"เที่ยง"` ไม่ให้ถูกเข้าใจผิดว่าเป็นสถานที่
+  2. **ระบบสอนโนอาผ่านเสียงพูดแบบ Real-time (Voice Training & Contextual Learning):**
+     - ผู้ใช้ต้องการพูดสอนโนอาได้โดยตรง เช่น `"คำนี้อยากให้โนอาเปลี่ยนให้ ให้ตอบว่า..."` หรือ `"สอนโนอาว่า ถ้าพูดว่า... ให้ตอบว่า..."` แล้วให้โนอานำไปจำและปรับพฤติกรรมใช้งานได้จริงทันที
+     - **การแก้ไขใน [`src/services/ai/aiService.ts`](file:///c:/Anewproject/boai/src/services/ai/aiService.ts):** เพิ่มฟังก์ชัน `detectVoiceTrainingIntent()` ตรวจจับเจตนาการสอน 3 รูปแบบ (ถาม-ตอบตรงตัว, แก้ไขคำตอบจากบริบทล่าสุดในห้องแชท, และการขอเปลี่ยนคำตอบเฉพาะคำ) แล้วบันทึกลง Few-Shot Training Examples ใน [`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts) อัตโนมัติ พร้อมส่ง Event `noar-examples-updated` ไปยังหน้า Training Studio แบบเรียลไทม์ โนอาจะนำไปใช้ตอบทันทีด้วยความแม่นยำ 100%
+  3. **ถอดชื่อ "โบ้" (Bo) ออกจากระบบ Wake Word ถาวร:**
+     - ผู้ใช้พบว่าในหน้าตั้งค่า Wake Word คำว่า "โบ้" ถูกแอดกลับเข้ามาจนกลายเป็น 11/3 ชื่อ และเวลาเรียกโบ้ยังตอบสนองอยู่
+     - **การแก้ไขใน [`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts) & [`src/services/audio/audioService.ts`](file:///c:/Anewproject/boai/src/services/audio/audioService.ts):**
+       - ลบชื่อโบ้ทั้งหมดออกจาก `DEFAULT_SETTINGS.alternate_names` คงไว้เฉพาะ variants ของโนอา (`น้องโนอา`, `ไอ้โนอา`, `Noar`)
+       - ตัดโค้ด Migration เก่าที่คอยยัดชื่อ `ไอ้โบ้, น้องโบ, โบ้, Bo AI` กลับเข้าไปทิ้ง พร้อมเพิ่มตัวกรองล้างชื่อโบ้ที่ค้างใน `localStorage` อัตโนมัติ
+       - ถอด Regular Expression และ Acoustic Confusion Patterns ของคำว่าโบ้ออกจาก Audio Listener ถาวร ทำให้การเรียก "โบ้" จะไม่กระตุ้นให้ระบบตื่นอีกต่อไป
+- **ผลการทดสอบ:**
+  - Build โปรเจกต์ผ่าน 100% (`npm run build` สำเร็จทั้ง Vite และ Electron TypeScript compilation 0 errors)
+
+---
+
+### 32. แผนงานการพัฒนาระยะถัดไป (Next Phase Roadmap & Action Plan) 🚀📋
+วางแผนการพัฒนา 3 เสาหลักสำคัญ เพื่อยกระดับ Noar AI ให้เป็น Personal AI Desktop Assistant ที่สมบูรณ์แบบ ทันสมัย และตอบโจทย์การใช้งานจริงในชีวิตประจำวัน:
+
+#### เสาหลักที่ 1: ยกเครื่องหน้าตา UI ใหม่ให้ดูทันสมัย เรียบหรู และสะอาดตา (Modern & Minimalist UI Redesign) 🎨✨
+- **เป้าหมาย:** ปรับลุคของ Noar AI ให้มีความ Modern, Sleek, Minimalist สบายตา ลดความรกรุงรัง (Visual Clutter) และให้ความรู้สึกเหมือนแอปพลิเคชันระดับพรีเมียม (เช่น Linear, Raycast, Discord, macOS Sonoma)
+- **รายละเอียดการดำเนินงาน:**
+  1. **Minimalist Layout & Visual De-cluttering:**
+     - ปรับโครงสร้างหน้า Dashboard, Conversation และ Settings ให้มี White-space / Negative-space ที่ลงตัว
+     - ลดทอนกรอบและเส้นขอบที่ซ้ำซ้อน เปลี่ยนมาใช้พื้นผิวระดับเบา (Subtle Surface Elevation & Glassmorphism)
+     - จัดกลุ่มฟังก์ชันย่อยในหน้า Tools และ Settings ให้อยู่ในรูปแบบ Collapsible Accordion หรือ Segmented Views ที่สะอาดตา
+  2. **Refined Typography & Micro-Interactions:**
+     - ยกระดับการจัดลำดับตัวอักษร (Typographic Hierarchy) ด้วย `Noto Sans Thai` ให้ดูโปร่ง เบา และคมชัด
+     - เพิ่มลูกเล่น Micro-animations นุ่มนวล เช่น สถานะการฟังของโนอา (Breathing Orb / Audio Waveform Minimalist Bar) ที่เคลื่อนไหวลื่นไหลตามระดับเสียงแบบ 60fps
+  3. **Compact Floating Assistant Mode (Mini Widget):**
+     - ปรับโหมดหน้าต่างลอยขนาดเล็ก (Mini Floating Bar / Orb) ให้เรียบเท่ วางมุมจอได้โดยไม่เกะกะสายตา พร้อมแอนิเมชันตอนเรียกใช้งาน (Summon Transitions)
+
+#### เสาหลักที่ 2: ระบบเสียงและเสียงตอบรับเพิ่มเติม (Enhanced Voice & Sound Experience) 🔊🎧
+- **เป้าหมาย:** เพิ่มมิติทางเสียงให้การโต้ตอบกับโนอามีชีวิตชีวา เป็นธรรมชาติ และมี Audio Feedback ชัดเจนในทุกสถานะ
+- **รายละเอียดการดำเนินงาน:**
+  1. **Audio SFX Feedback Pack (ชุดเสียงเอฟเฟกต์ตอบรับอัจฉริยะ):**
+     - **Wake Chime:** เสียงคอร์ดกระดิ่งสั้นๆ ไพเราะ นุ่มนวล เมื่อได้ยินคำว่า "โนอา" เพื่อให้ผู้ใช้รู้ทันทีว่าโนอากำลังตั้งใจฟัง
+     - **Listening / Processing Chime:** เสียงแจ้งสถานะเบาๆ เมื่อระบบกำลังประมวลผลคำสั่ง
+     - **Success / Done Chime:** เสียงยืนยันเมื่อบันทึกงาน เตือนความจำ หรือตั้งค่าเสร็จสิ้น
+     - **Error / Mute Chime:** เสียงแจ้งเตือนนุ่มนวลเมื่อเกิดข้อผิดพลาดหรือเมื่อกดปิดไมโครโฟน
+     - มีสวิตช์เปิด/ปิดเสียงเอฟเฟกต์ (SFX Toggle) และแถบปรับระดับความดังแยกอิสระในหน้าการตั้งค่า
+  2. **ตัวเลือกเสียงสังเคราะห์เพิ่มเติม (Expanded High-Quality Voices):**
+     - เพิ่มตัวเลือกเสียงภาษาไทยและเสียงสากลที่หลากหลายและเป็นธรรมชาติยิ่งขึ้น (Edge TTS Neural Voices คุณภาพสูง, Google Cloud TTS Custom Neural, และ fine-tuned xAI Grok Voice)
+     - รองรับการปรับแต่งความเร็ว (Speed / Pitch / Expressiveness) ของเสียงพูดให้ตรงกับสไตล์ที่ผู้ใช้ชอบมากที่สุด
+
+#### เสาหลักที่ 3: ระบบทำงานบน Desktop เต็มรูปแบบ & เปิดอัตโนมัติตอนเปิดคอม (Desktop Integration & Auto-Start with Windows) 🖥️⚡
+- **เป้าหมาย:** ทำให้ Noar AI ฝังตัวและทำงานร่วมกับระบบปฏิบัติการ Windows ได้อย่างสมบูรณ์แบบ เปิดเครื่องมาพร้อมใช้งานทันทีเหมือน Discord หรือ Spotify
+- **รายละเอียดการดำเนินงาน:**
+  1. **Auto-Start with Windows (เปิดโปรแกรมอัตโนมัติเมื่อเปิดคอมพิวเตอร์):**
+     - ใช้งาน Electron API `app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true })`
+     - สตาร์ทขึ้นมาแบบเงียบๆ เบื้องหลัง (Silent Boot) เพื่อให้เริ่มดักฟังคำเรียก "โนอา" ได้ทันทีโดยไม่ต้องเด้งหน้าต่างมารบกวนการเริ่มใช้งานคอมพิวเตอร์
+     - เพิ่มสวิตช์เปิด-ปิด `"เปิดโปรแกรมอัตโนมัติเมื่อเปิดคอมพิวเตอร์ (Start with Windows)"` ในหน้าการตั้งค่า
+  2. **Run in Background & Minimize to System Tray (ทำงานเบื้องหลัง 24/7):**
+     - ปรับพฤติกรรมของปุ่มปิด (Close Button `X`): เมื่อกดปิดหน้าต่าง จะไม่ปิดแอปพลิเคชัน แต่จะย่อลงไปซ่อนตัวที่ System Tray มุมขวาล่างของ Windows
+     - เมนูคลิกขวาที่ Tray Icon ครบถ้วน: แสดงหน้าต่าง, สลับไมโครโฟน, ปิดเสียง, และเมนูออกจากโปรแกรมจริง (Quit App)
+  3. **Windows Native Desktop Notifications:**
+     - เชื่อมต่อการแจ้งเตือนงานและเตือนความจำเข้ากับ Windows Action Center Notification มีปุ่มกดเลื่อนเวลา (Snooze) หรือทำเครื่องหมายว่าเสร็จแล้วได้จากตัวแจ้งเตือน
+  4. **Global Hotkey Customization:**
+     - ปรับแต่งปุ่มลัดเรียกโนอาจากทุกโปรแกรม (เช่น `Alt+Space` หรือ `Ctrl+Shift+Space`) สามารถเปิดหน้าต่างสนทนาหรือเริ่มฟังคำสั่งเสียงได้ทันทีแม้กำลังเล่นเกมหรือทำงานอยู่ในโปรแกรมอื่น
+
+---
+*บันทึกล่าสุด: 18 ตุลาคม 2026*
+
 
 
 

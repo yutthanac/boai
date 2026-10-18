@@ -75,6 +75,14 @@ export const TrainingStudio: React.FC = () => {
     }
     setKnowledgeList(db.getKnowledge());
     setExamplesList(db.getExamples());
+
+    const handleExamplesSync = () => {
+      setExamplesList(db.getExamples());
+    };
+    window.addEventListener('noar-examples-updated', handleExamplesSync);
+    return () => {
+      window.removeEventListener('noar-examples-updated', handleExamplesSync);
+    };
   }, []);
 
   // Save Personality & Tuning Sliders
