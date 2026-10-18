@@ -14,14 +14,14 @@ export class LineWebhookServer {
   private server: http.Server | null = null;
   private port: number = 3000;
   private channelSecret: string = '71ff04a0ec6aa3923cdc447ae7331589';
-  private channelAccessToken: string = '71ff04a0ec6aa3923cdc447ae7331589';
+  private channelAccessToken: string = '/0hfvn5vtlMpbGaKHrp7cyM8dOlLYyas3gtXmH0NfChdMq9gOEQ4qTnz9a1/XfRGi8L6BbepidsC45BgoQzFYYVnCJxpmU39aBcD0hSnlkXvEsFZIocq7OEQ6GU3Emy6oG8fwjWMvFAriY78nyY3qwdB04t89/1O/w1cDnyilFU=';
   private lastDetectedUserId: string | null = null;
   private mainWindow: BrowserWindow | null = null;
 
   private constructor() {
     this.port = process.env.LINE_WEBHOOK_PORT ? parseInt(process.env.LINE_WEBHOOK_PORT) : 3000;
     this.channelSecret = process.env.LINE_CHANNEL_SECRET || '71ff04a0ec6aa3923cdc447ae7331589';
-    this.channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || this.channelSecret;
+    this.channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || '/0hfvn5vtlMpbGaKHrp7cyM8dOlLYyas3gtXmH0NfChdMq9gOEQ4qTnz9a1/XfRGi8L6BbepidsC45BgoQzFYYVnCJxpmU39aBcD0hSnlkXvEsFZIocq7OEQ6GU3Emy6oG8fwjWMvFAriY78nyY3qwdB04t89/1O/w1cDnyilFU=';
   }
 
   public static getInstance(): LineWebhookServer {

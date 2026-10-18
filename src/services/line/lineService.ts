@@ -43,11 +43,17 @@ export class LineService {
   // Retrieve Channel Access Token
   public getChannelAccessToken(): string {
     const settings = db.getSettings();
-    return (
+    const token = (
       settings.line_channel_access_token ||
       (typeof import.meta !== 'undefined' && import.meta.env?.VITE_LINE_CHANNEL_ACCESS_TOKEN) ||
-      this.getChannelSecret()
+      '/0hfvn5vtlMpbGaKHrp7cyM8dOlLYyas3gtXmH0NfChdMq9gOEQ4qTnz9a1/XfRGi8L6BbepidsC45BgoQzFYYVnCJxpmU39aBcD0hSnlkXvEsFZIocq7OEQ6GU3Emy6oG8fwjWMvFAriY78nyY3qwdB04t89/1O/w1cDnyilFU='
     ).trim();
+
+    // If previously saved token in settings was the 32-character Channel Secret, use the real Access Token
+    if (token.length <= 40) {
+      return '/0hfvn5vtlMpbGaKHrp7cyM8dOlLYyas3gtXmH0NfChdMq9gOEQ4qTnz9a1/XfRGi8L6BbepidsC45BgoQzFYYVnCJxpmU39aBcD0hSnlkXvEsFZIocq7OEQ6GU3Emy6oG8fwjWMvFAriY78nyY3qwdB04t89/1O/w1cDnyilFU=';
+    }
+    return token;
   }
 
   // Retrieve stored LINE User ID
