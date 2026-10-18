@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/db/databaseService';
-import { AppSettings, LLMProvider } from '../types';
+import { AppSettings, LLMProvider, StorageUsageInfo } from '../types';
 import {
   Key,
   Cpu,
@@ -21,10 +21,19 @@ import {
   Zap,
   Sun,
   Moon,
-  Palette
+  Palette,
+  HardDrive,
+  Database,
+  Trash2,
+  RefreshCw,
+  MessageSquare,
+  Calendar,
+  Send,
+  Copy
 } from 'lucide-react';
 import { audioService } from '../services/audio/audioService';
 import { aiService } from '../services/ai/aiService';
+import { lineService } from '../services/line/lineService';
 import { useAssistantStore } from '../stores/useAssistantStore';
 
 export const Settings: React.FC = () => {
@@ -38,9 +47,114 @@ export const Settings: React.FC = () => {
   const [isTestingApi, setIsTestingApi] = useState<string | null>(null);
   const [apiTestResult, setApiTestResult] = useState<{ provider: string; success: boolean; message: string; model?: string } | null>(null);
 
+  // Storage & Quota Management State
+  const [storageInfo, setStorageInfo] = useState<StorageUsageInfo | null>(null);
+  const [isClearingStorage, setIsClearingStorage] = useState(false);
+  const [storageFeedback, setStorageFeedback] = useState<string | null>(null);
+  const [confirmClearType, setConfirmClearType] = useState<'chat' | 'reminders' | 'cache' | 'all' | null>(null);
+
+  const refreshStorageInfo = async () => {
+    try {
+      const info = await db.getStorageUsageInfo();
+      setStorageInfo(info);
+    } catch (e) {
+      console.warn('Failed to fetch storage info:', e);
+    }
+  };
+
   useEffect(() => {
     setSettings(db.getSettings());
+    refreshStorageInfo();
+
+    const handleStorageUpdate = () => {
+      refreshStorageInfo();
+    };
+    window.addEventListener('noar-storage-updated', handleStorageUpdate);
+    window.addEventListener('noar-reminders-updated', handleStorageUpdate);
+
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.getLineWebhookInfo) {
+      (window as any).electronAPI.getLineWebhookInfo().then((info: any) => {
+        if (info) setWebhookInfo(info);
+      }).catch(() => {});
+    }
+
+    const handleLineUserSync = (e: any) => {
+      if (e.detail?.userId) {
+        setSettings((prev) => ({ ...prev, line_user_id: e.detail.userId }));
+      }
+    };
+    window.addEventListener('noar-line-user-updated', handleLineUserSync);
+
+    return () => {
+      window.removeEventListener('noar-storage-updated', handleStorageUpdate);
+      window.removeEventListener('noar-reminders-updated', handleStorageUpdate);
+      window.removeEventListener('noar-line-user-updated', handleLineUserSync);
+    };
   }, []);
+
+  // LINE Official Account & Webhook State
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [isTestingLine, setIsTestingLine] = useState(false);
+  const [lineTestResult, setLineTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [webhookInfo, setWebhookInfo] = useState<{ port: number; endpoint: string; running: boolean } | null>(null);
+
+  const handleCopyWebhookUrl = () => {
+    const port = webhookInfo?.port || settings.line_webhook_port || 3000;
+    const url = `http://localhost:${port}/api/line/webhook`;
+    navigator.clipboard.writeText(url);
+    setCopiedWebhook(true);
+    setTimeout(() => setCopiedWebhook(false), 2500);
+  };
+
+  const handleTestLineSchedule = async () => {
+    setIsTestingLine(true);
+    setLineTestResult(null);
+    try {
+      db.saveSettings(settings);
+      const res = await lineService.sendScheduleToLine('วันนี้');
+      setLineTestResult({ success: res.success, message: res.message });
+      setTimeout(() => setLineTestResult(null), 8000);
+    } catch (e: any) {
+      setLineTestResult({ success: false, message: e?.message || 'ส่งข้อความเข้า LINE ล้มเหลว' });
+      setTimeout(() => setLineTestResult(null), 8000);
+    } finally {
+      setIsTestingLine(false);
+    }
+  };
+
+  const handleChangeMaxStorage = (gb: number) => {
+    db.setMaxStorageLimit(gb);
+    setSettings((prev) => ({ ...prev, max_storage_gb: gb }));
+    refreshStorageInfo();
+    setStorageFeedback(`กำหนดขีดจำกัดความจุสูงสุดเป็น ${gb} GB เรียบร้อยแล้วค่ะ 💾`);
+    setTimeout(() => setStorageFeedback(null), 3000);
+  };
+
+  const handleExecuteClear = async (type: 'chat' | 'reminders' | 'cache' | 'all') => {
+    setIsClearingStorage(true);
+    try {
+      if (type === 'chat') {
+        db.clearChatStorage();
+        setStorageFeedback('เคลียร์ประวัติการสนทนาทั้งหมดเรียบร้อยแล้วค่ะ 🧹');
+      } else if (type === 'reminders') {
+        db.clearRemindersStorage();
+        setStorageFeedback('เคลียร์รายการแจ้งเตือนและตารางงานเรียบร้อยแล้วค่ะ ⏰');
+      } else if (type === 'cache') {
+        await db.clearCacheStorage();
+        setStorageFeedback('ล้างแคชระบบและบันทึกชั่วคราวเรียบร้อยแล้วค่ะ ⚡');
+      } else if (type === 'all') {
+        await db.clearAllStorage(true);
+        setStorageFeedback('ล้างข้อมูลใน Storage ทั้งหมดเรียบร้อยแล้ว (ยังคงเก็บ API Keys ไว้) ✨');
+      }
+      await refreshStorageInfo();
+    } catch (err: any) {
+      setStorageFeedback(`เกิดข้อผิดพลาดในการเคลียร์: ${err?.message || 'Error'}`);
+    } finally {
+      setIsClearingStorage(false);
+      setConfirmClearType(null);
+      setTimeout(() => setStorageFeedback(null), 4000);
+    }
+  };
 
   const handleTestApi = async (provider: LLMProvider) => {
     setIsTestingApi(provider);
@@ -64,7 +178,7 @@ export const Settings: React.FC = () => {
     }
 
     try {
-      await audioService.speak('สวัสดีจ้า เราคือโบ้เพื่อนแกนะ มีเรื่องอะไรให้เราช่วยบอกมาได้เลย', settings.tts_rate, settings.tts_pitch);
+      await audioService.speak('สวัสดีค่ะ โนอาพร้อมรับคำสั่งแล้วนะคะ มีเรื่องอะไรให้โนอาช่วยบอกมาได้เลยค่ะ', settings.tts_rate, settings.tts_pitch);
     } catch (e: any) {
       setTtsFeedback(`เกิดข้อผิดพลาด: ${e?.message || 'Error'}`);
     } finally {
@@ -947,6 +1061,304 @@ export const Settings: React.FC = () => {
             </div>
           </div>
 
+          {/* Section 2.7: LINE Official Account & Webhook Integration */}
+          <div className="glass-panel p-5 rounded-2xl border border-emerald-500/20 bg-emerald-950/10 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-white">LINE Official Account & Chatbot Webhook</h2>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Webhook Active (Port {webhookInfo?.port || settings.line_webhook_port || 3000})
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">ส่งการแจ้งเตือนตารางงานเข้า LINE เมื่อสั่ง "ช่วยส่งตารางของวันนี้ไปที่ไลน์ให้หน่อย" หรือระบุวันที่</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleTestLineSchedule}
+                disabled={isTestingLine}
+                className="px-2.5 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/30 text-[10px] flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isTestingLine ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3 text-emerald-400" />}
+                <span>ทดสอบส่งตารางงานเข้า LINE</span>
+              </button>
+            </div>
+
+            {/* Test result feedback banner */}
+            {lineTestResult && (
+              <div className={`p-2.5 rounded-lg text-xs flex items-start gap-2 border ${
+                lineTestResult.success
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}>
+                {lineTestResult.success ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-400" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-400" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[11px]">
+                    {lineTestResult.success ? 'ส่งข้อความเข้า LINE สำเร็จ!' : 'การส่งข้อความล้มเหลว'}
+                  </div>
+                  <div className="text-[10px] opacity-90 mt-0.5 leading-relaxed">{lineTestResult.message}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Webhook URL Endpoint Box */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-900/80 border border-white/[0.06]">
+              <div className="flex items-center justify-between text-xs">
+                <label className="font-medium text-slate-300">Webhook URL Endpoint สำหรับกรอกใน LINE Console</label>
+                <button
+                  type="button"
+                  onClick={handleCopyWebhookUrl}
+                  className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors"
+                >
+                  {copiedWebhook ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedWebhook ? 'คัดลอกเรียบร้อย!' : 'คัดลอก URL'}</span>
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`http://localhost:${webhookInfo?.port || settings.line_webhook_port || 3000}/api/line/webhook`}
+                  className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-emerald-300 font-mono select-all focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyWebhookUrl}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs border border-white/10 flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  {copiedWebhook ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>Copy</span>
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-relaxed pt-0.5">
+                ใส่ใน <strong className="text-slate-300">LINE Developers Console</strong> &gt; แท็บ Messaging API &gt; Webhook settings &gt; เปิด <strong className="text-emerald-400">Use webhook</strong> (หากต้องการทดสอบบนอินเทอร์เน็ต ใช้ Tunnel เช่น <code className="text-cyan-300 font-mono">ngrok http {webhookInfo?.port || settings.line_webhook_port || 3000}</code>)
+              </p>
+            </div>
+
+            {/* Keys Configuration */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              {/* Channel Secret */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-300">LINE Channel Secret (32 หลัก)</label>
+                <div className="relative">
+                  <input
+                    type={showKey.line_secret ? 'text' : 'password'}
+                    value={settings.line_channel_secret || ''}
+                    onChange={(e) => setSettings({ ...settings, line_channel_secret: e.target.value })}
+                    placeholder="71ff04a0ec6aa3923cdc447ae7331589"
+                    className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2 pr-10 text-xs text-white focus:outline-none focus:border-emerald-500/50 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleShowKey('line_secret')}
+                    className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                  >
+                    {showKey.line_secret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Channel Access Token */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-300">Channel Access Token (Long-lived)</label>
+                <div className="relative">
+                  <input
+                    type={showKey.line_token ? 'text' : 'password'}
+                    value={settings.line_channel_access_token || ''}
+                    onChange={(e) => setSettings({ ...settings, line_channel_access_token: e.target.value })}
+                    placeholder="กด Issue ในแท็บ Messaging API ของ LINE Console"
+                    className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2 pr-10 text-xs text-white focus:outline-none focus:border-emerald-500/50 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleShowKey('line_token')}
+                    className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                  >
+                    {showKey.line_token ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Connected LINE User ID */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <label className="font-medium text-slate-300">Connected LINE User ID (ผู้รับตารางงาน)</label>
+                <span className="text-[10px] text-slate-400">บันทึกอัตโนมัติเมื่อทักแชทบอท</span>
+              </div>
+              <input
+                type="text"
+                value={settings.line_user_id || ''}
+                onChange={(e) => setSettings({ ...settings, line_user_id: e.target.value })}
+                placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (หรือปล่อยว่างเพื่อส่งแบบ Broadcast ไปยังผู้ติดตามทุกคน)"
+                className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50 font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Section 2.8: Storage Quota & Progress (หลอด Progress แสดงขนาดพื้นที่ และ Clear Storage) */}
+          <div className="glass-panel p-5 rounded-2xl border border-white/[0.08] space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+                  <HardDrive className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-white">พื้นที่จัดเก็บ & แคช (Storage & Quota)</h2>
+                  <p className="text-[11px] text-slate-400">หลอดแสดงพื้นที่การใช้งาน และจัดการ Clear Storage</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={refreshStorageInfo}
+                title="รีเฟรชขนาดพื้นที่"
+                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Storage Quota Header & Max Limit Selector */}
+            <div className="p-3.5 rounded-xl bg-surface-elevated/70 border border-white/[0.04] space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-lg font-bold text-white tracking-tight">
+                      {storageInfo?.formattedTotal || '0 MB'}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      / {storageInfo?.formattedMax || `${settings.max_storage_gb || 1} GB`}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    คิดเป็น {storageInfo?.usagePercentage || 0}% ของโควต้าความจุสูงสุด
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] text-slate-400 font-medium">จำกัดความจุ:</span>
+                  {[0.5, 1, 2, 5, 10].map((gb) => (
+                    <button
+                      key={gb}
+                      type="button"
+                      onClick={() => handleChangeMaxStorage(gb)}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-medium border transition-all cursor-pointer ${
+                        (settings.max_storage_gb || 1) === gb
+                          ? 'bg-cyan-500/25 border-cyan-400/60 text-cyan-300 shadow-sm'
+                          : 'bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {gb} GB
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Progress Bar (หลอด Progress) */}
+              <div className="space-y-1.5">
+                <div className="w-full h-3.5 bg-slate-900/90 rounded-full overflow-hidden p-0.5 border border-white/10 relative shadow-inner">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      (storageInfo?.usagePercentage || 0) >= 90
+                        ? 'bg-gradient-to-r from-rose-500 to-red-600 shadow-[0_0_12px_rgba(244,63,94,0.6)] animate-pulse'
+                        : (storageInfo?.usagePercentage || 0) >= 70
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                        : 'bg-gradient-to-r from-cyan-500 via-indigo-500 to-violet-500 shadow-[0_0_12px_rgba(6,182,212,0.5)]'
+                    }`}
+                    style={{ width: `${Math.max(2, Math.min(100, storageInfo?.usagePercentage || 0))}%` }}
+                  />
+                </div>
+
+                <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono">
+                  <span>0 MB</span>
+                  <span className={storageInfo?.isNearLimit ? 'text-amber-400 font-bold' : ''}>
+                    {storageInfo?.usagePercentage || 0}% ใช้งาน
+                  </span>
+                  <span>{storageInfo?.formattedMax || `${settings.max_storage_gb || 1} GB`}</span>
+                </div>
+              </div>
+
+              {/* Storage Category Breakdown */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/[0.06]">
+                {storageInfo?.categories.map((cat, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-[11px] p-1.5 rounded-lg bg-black/20">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                      <span className="text-slate-300 truncate">{cat.name.split('(')[0].trim()}</span>
+                    </div>
+                    <span className="text-slate-400 font-mono shrink-0 ml-1">{cat.formatted}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Storage Feedback message */}
+            {storageFeedback && (
+              <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" />
+                <span>{storageFeedback}</span>
+              </div>
+            )}
+
+            {/* Clear Storage Quick Actions */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-slate-300">ตัวเลือกล้างพื้นที่ (Clear Storage Options)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearType('chat')}
+                  disabled={isClearingStorage}
+                  className="py-2 px-2.5 rounded-xl bg-surface-elevated/70 hover:bg-indigo-600/20 border border-white/[0.06] hover:border-indigo-500/40 text-slate-300 hover:text-indigo-200 text-xs flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <span className="truncate">เคลียร์ประวัติแชท</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearType('reminders')}
+                  disabled={isClearingStorage}
+                  className="py-2 px-2.5 rounded-xl bg-surface-elevated/70 hover:bg-violet-600/20 border border-white/[0.06] hover:border-violet-500/40 text-slate-300 hover:text-violet-200 text-xs flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                  <span className="truncate">เคลียร์ตารางงาน & เตือน</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearType('cache')}
+                  disabled={isClearingStorage}
+                  className="py-2 px-2.5 rounded-xl bg-surface-elevated/70 hover:bg-emerald-600/20 border border-white/[0.06] hover:border-emerald-500/40 text-slate-300 hover:text-emerald-200 text-xs flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="truncate">ล้างแคช & ข้อมูลระบบ</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearType('all')}
+                  disabled={isClearingStorage}
+                  className="py-2 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span className="truncate">ล้าง Storage ทั้งหมด</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Section 3: Privacy, Backup & System Auto-start */}
           <div className="glass-panel p-5 rounded-2xl border border-white/[0.08] space-y-4">
             <div className="flex items-center gap-2">
@@ -1022,6 +1434,45 @@ export const Settings: React.FC = () => {
                 className="px-3 py-1.5 rounded-lg text-xs bg-rose-600 hover:bg-rose-500 text-white font-medium shadow-md"
               >
                 ลบข้อมูลทั้งหมด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Specific Storage Modal */}
+      {confirmClearType && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-panel-elevated p-6 rounded-2xl border border-white/20 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2 text-amber-400">
+              <AlertTriangle className="w-5 h-5" />
+              <h3 className="text-sm font-bold text-white">
+                {confirmClearType === 'chat' && 'ยืนยันเคลียร์ประวัติการสนทนา?'}
+                {confirmClearType === 'reminders' && 'ยืนยันเคลียร์ตารางงานและการแจ้งเตือน?'}
+                {confirmClearType === 'cache' && 'ยืนยันล้างแคชระบบและบันทึกชั่วคราว?'}
+                {confirmClearType === 'all' && 'ยืนยันล้าง Storage ข้อมูลทั้งหมด?'}
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {confirmClearType === 'chat' && 'ข้อความสนทนาทั้งหมดในห้องแชทจะถูกลบเพื่อคืนพื้นที่จัดเก็บ (การตั้งค่าและความจำจะยังคงอยู่)'}
+              {confirmClearType === 'reminders' && 'รายการตารางงานและการแจ้งเตือนทั้งหมดจะถูกล้างออกจากระบบ'}
+              {confirmClearType === 'cache' && 'แคชไฟล์และ Audit Logs ระบบจะถูกลบเพื่อคืนความจุ'}
+              {confirmClearType === 'all' && 'ข้อมูลการสนทนา ตารางงาน และแคชทั้งหมดจะถูกลบ (API Keys และการตั้งค่าหลักจะยังคงอยู่)'}
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setConfirmClearType(null)}
+                className="px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-white/10 cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => handleExecuteClear(confirmClearType)}
+                disabled={isClearingStorage}
+                className="px-3 py-1.5 rounded-lg text-xs bg-rose-600 hover:bg-rose-500 text-white font-medium shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isClearingStorage ? 'กำลังล้างข้อมูล...' : 'ยืนยันการเคลียร์'}
               </button>
             </div>
           </div>

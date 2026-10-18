@@ -17,8 +17,8 @@ export class AudioService {
   private wakeWordCallbacks: Array<() => void> = [];
   private commandCapturedCallbacks: Array<(command: string) => void> = [];
   private interimSpeechCallbacks: Array<(text: string) => void> = [];
-  private currentWakeWord = 'โบ้';
-  private alternateWakeWords: string[] = ['ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'Bo AI', 'โบไอ'];
+  private currentWakeWord = 'โนอา';
+  private alternateWakeWords: string[] = ['โนอา', 'น้องโนอา', 'ไอ้โนอา', 'คุณโนอา', 'โนอาห์', 'noar', 'noah', 'Hey Noar', 'โบ้', 'น้องโบ', 'Bo AI'];
   private sensitivity = 75; // 0-100
   private preAmpStream: MediaStream | null = null;
 
@@ -37,22 +37,23 @@ export class AudioService {
     this.currentWakeWord = primary.toLowerCase().trim();
     const alts = [...alternates];
     
-    // Auto add comprehensive natural Thai greetings, tone variants, and phonetic forms
+    // Auto add comprehensive natural Thai greetings, tone variants, and phonetic forms for Noar / โนอา
     alts.push(
+      'โนอา', 'โนอาห์', 'โนอาร์', 'โนอ่า', 'โนอ้า', 'โนอ๊า', 'โนวา', 'โนฮา', 'โนอาา',
+      'ไอ้โนอา', 'ไอโนอา', 'ไอ้โนอาห์', 'ไอโนอาห์',
+      'น้องโนอา', 'น้องโนอาห์',
+      'พี่โนอา', 'พี่โนอาห์',
+      'คุณโนอา', 'คุณโนอาห์',
+      'เจ้าโนอา', 'เจ้าโนอาห์',
+      'บักโนอา', 'บักโนอาห์',
+      'เฮ้ยโนอา', 'เฮ้โนอา', 'เฮ้โนอาห์',
+      'ฮัลโหลโนอา', 'ฮัลโหลโนอาห์',
+      'โนอาครับ', 'โนอาค่ะ', 'โนอาคะ', 'โนอาจ๋า', 'โนอาเอ้ย', 'โนอาเอย',
+      'noar', 'noah', 'noa', 'nora',
+      'hey noar', 'hey noah', 'hi noar', 'hi noah', 'hello noar', 'ok noar',
+      // Backward compatibility for previous calls
       'โบ', 'โบ้', 'โบว์', 'โบ้ะ', 'โบบ',
-      'ไอ้โบ้', 'ไอโบ้', 'ไอ้โบ', 'ไอโบ',
-      'น้องโบ้', 'น้องโบ',
-      'พี่โบ้', 'พี่โบ',
-      'น้าโบ้', 'น้าโบ',
-      'บักโบ้', 'บักโบ',
-      'คุณโบ้', 'คุณโบ',
-      'เจ้าโบ้', 'เจ้าโบ',
-      'เฮ้ยโบ้', 'เฮ้ยโบ', 'เฮ้โบ้', 'เฮ้โบ',
-      'ฮัลโหลโบ้', 'ฮัลโหลโบ',
-      'โบ้ครับ', 'โบ้ค่ะ', 'โบ้คะ', 'โบ้จ๋า', 'โบ้เอ้ย', 'โบ้เอย',
-      'โบวี่', 'โบตั๋น',
-      'bo', 'beau', 'bow', 'bobo', 'boy', 'boe', 'boo',
-      'hey bo', 'hi bo', 'hello bo', 'ok bo', 'yo bo'
+      'ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'Bo AI', 'boai', 'hey bo'
     );
     
     this.alternateWakeWords = Array.from(new Set(alts.map(w => w.toLowerCase().trim()).filter(Boolean)));
@@ -84,9 +85,9 @@ export class AudioService {
     const raw = rawPhrase.trim().toLowerCase();
     const stripped = this.stripThaiToneMarks(raw);
 
-    // Guard against common Thai non-name words starting with โ-บ- (e.g. โบราณ, โบสถ์, โบกมือ)
-    const nonWakeWordsRegex = /(?:โบราณ|โบสถ์|โบกมือ|โบก|โบรก|โบว์ลิ่ง)/i;
-    if (nonWakeWordsRegex.test(raw) && !raw.includes('ไอ้โบ้') && !raw.includes('น้องโบ') && !raw.includes('บักโบ้') && !raw.includes('พี่โบ้')) {
+    // Guard against common Thai non-name words (e.g. โบราณ, โน้ตบุ๊ก, โน้ต, โนเนม)
+    const nonWakeWordsRegex = /(?:โบราณ|โบสถ์|โบกมือ|โบก|โบรก|โบว์ลิ่ง|โน้ต|โน๊ต|โน้ตบุ๊ก|โน๊ตบุ๊ค|โนเนม|โนลิมิต|โนคอมเมนต์)/i;
+    if (nonWakeWordsRegex.test(raw) && !raw.includes('โนอา') && !raw.includes('ไอ้โบ้') && !raw.includes('น้องโบ')) {
       return { matched: false, matchedWord: '' };
     }
 
@@ -110,21 +111,21 @@ export class AudioService {
 
     // 2. High sensitivity regex matching (sensitivity >= 50)
     if (this.sensitivity >= 50) {
-      const conversationalBoRegex = /(?:ไอ้|ไอ|น้อง|พี่|น้า|บัก|คุณ|เฮ้ย|เฮ้|ฮัลโหล|เจ้า|ฮัลโล)?\s*(?:โ[บพ][้่๊๋์]?|โบว์|โบวี่|โบตั๋น|bo|beau|bow|bobo|boy|boe|boo)(?:$|\s|[ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย|วัน|ตอน])/i;
-      if (conversationalBoRegex.test(raw) || conversationalBoRegex.test(stripped)) {
-        const match = raw.match(conversationalBoRegex) || stripped.match(conversationalBoRegex);
-        return { matched: true, matchedWord: match ? match[0].trim() : 'โบ้' };
+      const conversationalRegex = /(?:ไอ้|ไอ|น้อง|พี่|น้า|บัก|คุณ|เฮ้ย|เฮ้|ฮัลโหล|เจ้า|ฮัลโล)?\s*(?:โน[อวฮ][าห์่้๊๋]?|โนอาร์|โนอาห์|noar|noah|noa|nora|โ[บพ][้่๊๋์]?|โบว์|bo)(?:$|\s|[ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย|วัน|ตอน])/i;
+      if (conversationalRegex.test(raw) || conversationalRegex.test(stripped)) {
+        const match = raw.match(conversationalRegex) || stripped.match(conversationalRegex);
+        return { matched: true, matchedWord: match ? match[0].trim() : 'โนอา' };
       }
     }
 
     // 3. Ultra sensitivity soft-voice & whisper acoustic confusion (sensitivity >= 70)
-    // When whispering or speaking softly from a distance, Thai STT frequently mis-transcribes "โบ้" as:
-    // "โด้", "โม้", "โก้", "โอ้", "โม่", "บู่", "บอส", "บ๊อบ", "บ๊วย", "โบ้ะ"
+    // When whispering or speaking softly from a distance, Thai STT frequently mis-transcribes "โนอา" / "โบ้" as:
+    // "โลอา", "โอนา", "โนวา", "โนฮา", "โมอา", "โงอา", "โด้", "โม้", "โก้", "โอ้"
     if (this.sensitivity >= 70) {
-      const whisperRegex = /^(?:ไอ้|น้อง|บัก|เฮ้|เฮ้ย)?\s*(?:โ[ด้ม้ก้อ้ม่ผ่]|บู่|บอส|บ๊อบ|บ๊วย|โบ้ะ|โป๊ะ)\s*(?:ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย)?/i;
+      const whisperRegex = /^(?:ไอ้|น้อง|บัก|เฮ้|เฮ้ย)?\s*(?:โน[อวฮ][าห์่้๊๋]?|โลอา|โอนา|โนวา|โนฮา|โมอา|โงอา|โ[ด้ม้ก้อ้ม่ผ่]|บู่|บอส|บ๊อบ|บ๊วย|โบ้ะ|โป๊ะ)\s*(?:ครับ|ค่ะ|จ้า|จ๋า|แก|นะ|วะ|โว้ย|เปิด|ปิด|ช่วย|กี่โมง|สภาพอากาศ|เพลง|ทำอะไร|ฟัง|หน่อย)?/i;
       if (whisperRegex.test(raw)) {
         const match = raw.match(whisperRegex);
-        return { matched: true, matchedWord: match ? match[0].trim() : 'โบ้' };
+        return { matched: true, matchedWord: match ? match[0].trim() : 'โนอา' };
       }
     }
 
@@ -280,7 +281,7 @@ export class AudioService {
           .filter(Boolean)
           .sort((a, b) => b.length - a.length); // Longest first to avoid partial prefix collisions
 
-        // STATE 1: Waiting for wake word (e.g. "ไอ้โบ้", "โบ้", "น้องโบ", whisper variants)
+        // STATE 1: Waiting for wake word (e.g. "โนอา", "น้องโนอา", "noar", "ไอ้โบ้", whisper variants)
         if (this.voiceSessionState === 'listening_wake' || this.voiceSessionState === 'idle') {
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const resItem = event.results[i];
@@ -543,8 +544,9 @@ export class AudioService {
       // 2. Clean parentheses & quotes so TTS doesn't read "วงเล็บเปิด...วงเล็บปิด" or "เครื่องหมายคำพูด"
       .replace(/\(([^)]+)\)/g, ', $1, ')
       .replace(/[()[\]{}"'“”‘’]/g, ' ')
-      // 3. Strip emojis
-      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
+      // 3. Strip all emojis, stickers, and pictographic symbols so TTS NEVER reads out symbol names
+      .replace(/\p{Extended_Pictographic}/gu, '')
+      .replace(/[\u{1F000}-\u{1FAFF}\u{2300}-\u{23FF}\u{25A0}-\u{25FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}]/gu, '');
 
     // 4. Elongated vowels and repetitive Thai characters (ลากเสียงอย่างมี dynamic)
     // Reduce excessive ending repetitions (e.g. มากกกกก -> มากกก, จริงงงง -> จริงงง, อ่าาาาา -> อ่าาา) with breathing pause
@@ -581,6 +583,7 @@ export class AudioService {
 
     // 7. Tech & English loanwords to Thai Phonetics (อ่านคำศัพท์ได้แม่นยำ ไม่เพี้ยน)
     const phonetics: Array<[RegExp, string]> = [
+      [/\b(?:Noar AI|noar ai|NoarAI|noarai|Noar|noar|Noah|noah)\b/gi, 'โนอา'],
       [/\b(?:Bo AI|bo ai|BoAI|boai)\b/gi, 'โบไอ'],
       [/\b(?:ChatGPT|chatgpt)\b/gi, 'แชทจีพีที'],
       [/\b(?:OpenAI|openai)\b/gi, 'โอเพนเอไอ'],

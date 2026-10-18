@@ -13,7 +13,7 @@ export const AiOrbVisualizer: React.FC = () => {
         return {
           ring: 'border-cyan-400 ring-4 ring-cyan-500/30',
           textColor: 'text-cyan-400',
-          status: 'โบ้กำลังตั้งใจฟังคำสั่ง...',
+          status: 'โนอากำลังตั้งใจฟังคำสั่ง...',
           badge: 'LISTENING',
           pulseColor: 'bg-cyan-500/20 border-cyan-400/40',
         };
@@ -21,7 +21,7 @@ export const AiOrbVisualizer: React.FC = () => {
         return {
           ring: 'border-blue-400 ring-4 ring-blue-500/30',
           textColor: 'text-blue-400',
-          status: 'โบ้กำลังคิดหาคำตอบให้เพื่อน...',
+          status: 'โนอากำลังคิดหาคำตอบให้เพื่อน...',
           badge: 'THINKING',
           pulseColor: 'bg-blue-500/20 border-blue-400/40',
         };
@@ -29,7 +29,7 @@ export const AiOrbVisualizer: React.FC = () => {
         return {
           ring: 'border-emerald-400 ring-4 ring-emerald-500/35',
           textColor: 'text-emerald-400',
-          status: 'โบ้กำลังพูดตอบกลับคุณ...',
+          status: 'โนอากำลังพูดตอบกลับคุณ...',
           badge: 'SPEAKING',
           pulseColor: 'bg-emerald-500/20 border-emerald-400/50',
         };
@@ -37,7 +37,7 @@ export const AiOrbVisualizer: React.FC = () => {
         return {
           ring: 'border-indigo-500/30 hover:border-indigo-400/60',
           textColor: 'text-slate-300',
-          status: 'คลิกที่โบ้ หรือเรียก "โบ้" เพื่อเริ่มคุย',
+          status: 'คลิกที่โนอา หรือเรียก "โนอา" เพื่อเริ่มคุย',
           badge: 'ONLINE',
           pulseColor: 'bg-transparent border-transparent',
         };
@@ -74,7 +74,7 @@ export const AiOrbVisualizer: React.FC = () => {
             }
           }}
           disabled={isThinking}
-          title={state === 'idle' ? 'คลิกที่โบ้เพื่อเริ่มพูดคุย' : info.status}
+          title={state === 'idle' ? 'คลิกที่โนอาเพื่อเริ่มพูดคุย' : info.status}
           className={`relative w-48 h-48 rounded-full p-2 bg-[#0a0f1d] border-2 transition-all duration-300 cursor-pointer focus:outline-none ${info.ring} shadow-[0_8px_32px_rgba(0,0,0,0.5)] group`}
         >
           {/* Inner Stage Container */}
@@ -181,7 +181,7 @@ export const AiOrbVisualizer: React.FC = () => {
           </p>
         </div>
         <p className="text-xs text-slate-500">
-          คำเรียก: "โบ้" • สายตามองตามเมาส์ และขยับปากตอบตามเสียง
+          คำเรียก: "โนอา" (Noar) • สายตามองตามเมาส์ และขยับปากตอบตามเสียง
         </p>
       </div>
     </div>

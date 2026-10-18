@@ -13,11 +13,11 @@ export function setupTray(mainWindow: BrowserWindow): Tray {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip('Bo AI (น้องโบ) — Personal AI Desktop Assistant');
+  tray.setToolTip('Noar AI (โนอา) — Personal AI Desktop Assistant');
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'เปิดหน้าต่างหลัก (Show Bo AI) — Alt+Space',
+      label: 'เปิดหน้าต่างหลัก (Show Noar AI) — Alt+Space',
       click: () => {
         mainWindow.show();
         mainWindow.focus();

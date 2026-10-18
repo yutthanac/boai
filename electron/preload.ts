@@ -29,5 +29,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMediaCommandReceived: (callback: (command: string) => void) => {
     ipcRenderer.on('media-command-received', (_event, command) => callback(command));
   },
+  sendLineMessage: (params: { token: string; to?: string; message: string; broadcastIfNoTo?: boolean }) =>
+    ipcRenderer.invoke('send-line-message', params),
+  getLineWebhookInfo: () => ipcRenderer.invoke('get-line-webhook-info'),
+  onLineUserConnected: (callback: (data: { userId: string; event: any; timestamp: string }) => void) => {
+    ipcRenderer.on('line-user-connected', (_event, data) => callback(data));
+  },
 });
 

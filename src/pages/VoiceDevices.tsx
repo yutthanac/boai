@@ -37,16 +37,16 @@ export const VoiceDevices: React.FC = () => {
     testSpeaker,
   } = useAudioStore();
 
-  const [wakeWord, setWakeWord] = useState('น้องโบ');
-  const [alternateNames, setAlternateNames] = useState<string[]>(['Bo AI', 'โบไอ']);
+  const [wakeWord, setWakeWord] = useState('โนอา');
+  const [alternateNames, setAlternateNames] = useState<string[]>(['Noar', 'น้องโนอา']);
   const [newAltName, setNewAltName] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
     fetchDevices();
     const settings = db.getSettings();
-    setWakeWord(settings.wake_word || 'น้องโบ');
-    setAlternateNames(settings.alternate_names || ['Bo AI', 'โบไอ']);
+    setWakeWord(settings.wake_word || 'โนอา');
+    setAlternateNames(settings.alternate_names || ['Noar', 'น้องโนอา']);
 
     return () => {
       stopMicTest();
@@ -55,7 +55,7 @@ export const VoiceDevices: React.FC = () => {
 
   const handleSaveWakeWords = () => {
     const settings = db.getSettings();
-    const cleanPrimary = wakeWord.trim() || 'ไอ้โบ้';
+    const cleanPrimary = wakeWord.trim() || 'โนอา';
     settings.wake_word = cleanPrimary;
     settings.alternate_names = alternateNames;
     db.saveSettings(settings);
@@ -222,7 +222,7 @@ export const VoiceDevices: React.FC = () => {
                 type="text"
                 value={wakeWord}
                 onChange={(e) => setWakeWord(e.target.value)}
-                placeholder="เช่น น้องโบ, Bo AI"
+                placeholder="เช่น โนอา, Noar, น้องโนอา"
                 className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500/50"
               />
             </div>

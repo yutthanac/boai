@@ -2,6 +2,7 @@ import { app, BrowserWindow, globalShortcut, screen } from 'electron';
 import path from 'path';
 import { setupIpcHandlers } from './ipc-handlers';
 import { setupTray } from './tray';
+import { lineWebhookServer } from './line-webhook';
 
 // Enable background audio and video autoplay without user gesture requirement
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -30,6 +31,12 @@ function createWindow() {
 
   setupIpcHandlers(mainWindow);
   setupTray(mainWindow);
+
+  // Initialize and start LINE Webhook Server
+  lineWebhookServer.setMainWindow(mainWindow);
+  lineWebhookServer.start().catch((err) => {
+    console.warn('[LineWebhook] Startup warning:', err);
+  });
 
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -72,7 +79,7 @@ app.whenReady().then(() => {
       mainWindow.webContents.send('toggle-mini-mode-trigger');
     });
   } catch (err) {
-    console.warn('[Bo AI] Failed to register global shortcuts:', err);
+    console.warn('[Noar AI] Failed to register global shortcuts:', err);
   }
 
   app.on('activate', () => {

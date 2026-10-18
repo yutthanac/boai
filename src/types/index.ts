@@ -154,6 +154,12 @@ export interface AppSettings {
   vad_timeout_ms: number;
   mini_mode_hotkey?: string;
   theme?: 'dark' | 'light';
+  max_storage_gb?: number; // Maximum allocated storage quota in GB
+  line_channel_secret?: string;
+  line_channel_access_token?: string;
+  line_user_id?: string;
+  line_webhook_url?: string;
+  line_webhook_port?: number;
 }
 
 export interface ProviderQuotaInfo {
@@ -182,6 +188,47 @@ export interface ReminderItem {
   id: string;
   title: string;
   time: string;
+  location?: string;
   completed: boolean;
+  createdAt?: string;
+}
+
+export interface DeleteReminderResult {
+  status: 'deleted' | 'multiple_matches' | 'not_found' | 'need_selection' | 'empty';
+  deletedItem?: ReminderItem;
+  deletedCount?: number;
+  remainingCount: number;
+  matches?: ReminderItem[];
+  allReminders?: ReminderItem[];
+  keyword?: string;
+  index?: number;
+}
+
+export interface CompleteReminderResult {
+  status: 'completed' | 'already_completed' | 'not_found' | 'need_selection' | 'empty';
+  item?: ReminderItem;
+  remainingPendingCount: number;
+  allPending?: ReminderItem[];
+  keyword?: string;
+  index?: number;
+}
+
+export interface StorageCategoryBreakdown {
+  name: string;
+  bytes: number;
+  formatted: string;
+  percentage: number;
+  color: string;
+}
+
+export interface StorageUsageInfo {
+  totalBytes: number;
+  formattedTotal: string;
+  maxBytes: number;
+  formattedMax: string;
+  usagePercentage: number;
+  isNearLimit: boolean;
+  isOverLimit: boolean;
+  categories: StorageCategoryBreakdown[];
 }
 

@@ -59,7 +59,7 @@ export const TrainingStudio: React.FC = () => {
   >([
     {
       role: 'assistant',
-      content: 'สวัสดีแก! โบ้พร้อมให้ทดสอบแล้ว ลองถามมาได้เลย เดี๋ยวตอบตามสไตล์และบุคลิกที่ตั้งค่าไว้ให้ดู!',
+      content: 'สวัสดีค่ะ! โนอาพร้อมให้ทดสอบแล้ว ลองถามมาได้เลยนะคะ เดี๋ยวตอบตามสไตล์และบุคลิกที่ตั้งค่าไว้ให้ดูค่ะ!',
     },
   ]);
   const [testInput, setTestInput] = useState('');
@@ -502,12 +502,12 @@ export const TrainingStudio: React.FC = () => {
                   type="text"
                   value={newQuery}
                   onChange={(e) => setNewQuery(e.target.value)}
-                  placeholder="เช่น ไอ้โบ้ วันนี้เหนื่อยจังวะ มีเพลงชิลๆ ไหม?"
+                  placeholder="เช่น โนอา วันนี้เหนื่อยจังเลย มีเพลงฟังสบายๆ ไหม?"
                   className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500/50"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">คำตอบที่โบ้ต้องตอบ (สไตล์ที่ถูกต้อง)</label>
+                <label className="text-xs font-medium text-slate-300">คำตอบที่โนอาต้องตอบ (สไตล์ที่ถูกต้อง)</label>
                 <input
                   type="text"
                   value={newResponse}
@@ -584,7 +584,7 @@ export const TrainingStudio: React.FC = () => {
 
                       <div className="flex items-start gap-2">
                         <span className="text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded shrink-0">
-                          โบ้ตอบ
+                          โนอาตอบ
                         </span>
                         <p className="text-xs text-slate-300 leading-relaxed">{ex.expected_response}</p>
                       </div>
@@ -666,7 +666,7 @@ export const TrainingStudio: React.FC = () => {
                   type="text"
                   value={newKnowledgeContent}
                   onChange={(e) => setNewKnowledgeContent(e.target.value)}
-                  placeholder="พิมพ์ข้อความข้อมูลที่จะให้น้องโบจดจำและนำไปตอบคำถาม..."
+                  placeholder="พิมพ์ข้อความข้อมูลที่จะให้โนอาจดจำและนำไปตอบคำถาม..."
                   className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500/50"
                 />
               </div>
@@ -798,7 +798,7 @@ export const TrainingStudio: React.FC = () => {
               type="text"
               value={testInput}
               onChange={(e) => setTestInput(e.target.value)}
-              placeholder="พิมพ์คำถามทดสอบพฤติกรรมและการตอบสนองของโบ้..."
+              placeholder="พิมพ์คำถามทดสอบพฤติกรรมและการตอบสนองของโนอา..."
               className="flex-1 bg-[#111624] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50"
             />
             <button

@@ -104,7 +104,7 @@ export const Home: React.FC = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[10px] uppercase font-semibold text-slate-400">
-                ข้อความล่าสุด ({lastMessage.role === 'assistant' ? 'น้องโบ' : 'คุณ'})
+                ข้อความล่าสุด ({lastMessage.role === 'assistant' ? 'โนอา' : 'คุณ'})
               </p>
               <p className="text-xs text-slate-200 truncate mt-0.5">
                 {lastMessage.content}

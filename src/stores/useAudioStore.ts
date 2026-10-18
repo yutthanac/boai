@@ -95,7 +95,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   testSpeaker: async () => {
     set({ isTestingSpeaker: true });
     audioService.playChime('test');
-    await audioService.speak('ทดสอบระบบเสียงลำโพงของน้องโบ เสียงใส ชัดเจน ระดับปกติค่ะ');
+    await audioService.speak('ทดสอบระบบเสียงลำโพงของโนอา เสียงใส ชัดเจน ระดับปกติค่ะ');
     set({ isTestingSpeaker: false });
   },
 }));

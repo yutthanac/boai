@@ -64,7 +64,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
   messages: [],
   isAlwaysListening: true,
   isMuted: false,
-  statusText: 'พร้อมรับฟังคำสั่ง (เรียก "น้องโบ")',
+  statusText: 'พร้อมรับฟังคำสั่ง (เรียก "โนอา")',
   isMiniMode: false,
   musicTrack: null,
   musicVolume: (() => {
@@ -267,7 +267,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
 
     if (next) {
       audioService.startWakeWordDetection();
-      set({ statusText: 'เปิดโหมด Always Listening แล้ว (เรียก "น้องโบ")' });
+      set({ statusText: 'เปิดโหมด Always Listening แล้ว (เรียก "โนอา")' });
     } else {
       audioService.stopWakeWordDetection();
       set({ statusText: 'ปิดโหมด Always Listening แล้ว' });
@@ -348,7 +348,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
           const currentSettings = db.getSettings();
           set({
             state: 'idle',
-            statusText: currentSettings.always_listening ? 'พร้อมรับฟัง (เรียก "โบ้")' : 'สแตนด์บาย',
+            statusText: currentSettings.always_listening ? 'พร้อมรับฟัง (เรียก "โนอา")' : 'สแตนด์บาย',
           });
         }
       });
@@ -469,7 +469,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
 
       // If in mini mode, show Windows notification
       if (get().isMiniMode && window.electronAPI?.showNotification) {
-        window.electronAPI.showNotification('น้องโบ (Bo AI)', replyText.slice(0, 100));
+        window.electronAPI.showNotification('โนอา (Noar AI)', replyText.slice(0, 100));
       }
 
       // 4. Text to Speech
@@ -482,7 +482,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
       const settings = db.getSettings();
       set({
         state: 'idle',
-        statusText: settings.always_listening ? 'พร้อมรับฟัง (เรียก "โบ้")' : 'สแตนด์บาย',
+        statusText: settings.always_listening ? 'พร้อมรับฟัง (เรียก "โนอา")' : 'สแตนด์บาย',
       });
     }
   },

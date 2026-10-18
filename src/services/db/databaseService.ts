@@ -9,7 +9,11 @@ import {
   MemoryAuditLog,
   TrainingDataset,
   PersonalityConfig,
-  ReminderItem
+  ReminderItem,
+  DeleteReminderResult,
+  CompleteReminderResult,
+  StorageUsageInfo,
+  StorageCategoryBreakdown
 } from '../../types';
 
 const STORAGE_KEYS = {
@@ -22,11 +26,12 @@ const STORAGE_KEYS = {
   PERSONALITY: 'boai_personality',
   REMINDERS: 'boai_reminders',
   AUDIT_LOGS: 'boai_memory_audit_logs',
+  LINE_USER_ID: 'boai_line_user_id',
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
-  wake_word: 'โบ้',
-  alternate_names: ['ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'ไอ้โบว์', 'ไอโบว์', 'น้องโบว์', 'โบว์', 'Bo AI', 'โบไอ', 'Hey Bo'],
+  wake_word: 'โนอา',
+  alternate_names: ['น้องโนอา', 'ไอ้โนอา', 'คุณโนอา', 'โนอาห์', 'Noar', 'Noar AI', 'Hey Noar', 'ไอ้โบ้', 'น้องโบ', 'โบ้', 'Bo AI'],
   sensitivity: 75,
   always_listening: true,
   llm_provider: 'gemini',
@@ -54,12 +59,18 @@ const DEFAULT_SETTINGS: AppSettings = {
   vad_timeout_ms: 3000,
   mini_mode_hotkey: 'Alt+Space',
   theme: 'dark',
+  max_storage_gb: 1,
+  line_channel_secret: (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_LINE_CHANNEL_SECRET || import.meta.env?.LINE_CHANNEL_SECRET)) || '',
+  line_channel_access_token: (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_LINE_CHANNEL_ACCESS_TOKEN || import.meta.env?.LINE_CHANNEL_ACCESS_TOKEN)) || '',
+  line_user_id: (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_LINE_USER_ID || import.meta.env?.LINE_USER_ID)) || '',
+  line_webhook_url: (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_LINE_WEBHOOK_URL || import.meta.env?.LINE_WEBHOOK_URL)) || '',
+  line_webhook_port: 3000,
 };
 
 const DEFAULT_PERSONALITY: PersonalityConfig = {
-  name: 'โบ้',
-  system_prompt: `คุณคือ "โบ้" ผู้ช่วย AI ประจำ Desktop ตอบตรงประเด็น สั้น กระชับ ได้ใจความทันที ไม่เกริ่นยืดยาว สุภาพ เป็นมิตร ลงท้าย "ค่ะ / นะคะ" ไม่พูดคำว่า "แก" และไม่พูดถึงชื่อโมเดลหรือระบบ AI ใดๆ`,
-  speaking_style: 'สุภาพ กระชับ ตรงประเด็น เป็นมิตร ลงท้าย ค่ะ/นะคะ',
+  name: 'โนอา',
+  system_prompt: `คุณคือ "โนอา" (Noar) ผู้ช่วย AI ประจำ Desktop ตอบตรงประเด็น สั้น กระชับ ได้ใจความทันที ไม่เกริ่นยืดยาว สุภาพ เป็นมิตร ลงท้าย "ค่ะ / นะคะ" ไม่พูดคำว่า "แก" ไม่พูดถึงชื่อโมเดลหรือระบบ AI ใดๆ และห้ามใส่อิโมจิหรือสติกเกอร์ในข้อความตอบกลับเด็ดขาดเนื่องจากระบบจะนำไปอ่านออกเสียง`,
+  speaking_style: 'สุภาพ กระชับ ตรงประเด็น เป็นมิตร ไม่ใส่อิโมจิหรือสติกเกอร์ ลงท้าย ค่ะ/นะคะ',
   formality_level: 2,
   tuning: {
     wittiness: 50,
@@ -87,21 +98,21 @@ const DEFAULT_KNOWLEDGE: KnowledgeItem[] = [
   {
     id: 'kn_1',
     title: 'คู่มือระบบ Wake Word และเสียงคำสั่ง',
-    content: 'ผู้ใช้สามารถเรียก "น้องโบ" เพื่อเปิดโหมดรับฟังเสียงคำสั่ง เมื่อไฟสถานะเปลี่ยนเป็นสีฟ้า Neon Cyan แสดงว่าพร้อมรับฟังคำสั่งเสียง จากนั้นสามารถพูดสั่งการได้ทันที เช่น "เปิดเพลง", "ช่วยสรุปตารางงานวันนี้", "สภาพอากาศเป็นอย่างไร"',
+    content: 'ผู้ใช้สามารถเรียก "โนอา" หรือ "น้องโนอา" เพื่อเปิดโหมดรับฟังเสียงคำสั่ง เมื่อไฟสถานะเปลี่ยนเป็นสีฟ้า Neon Cyan แสดงว่าพร้อมรับฟังคำสั่งเสียง จากนั้นสามารถพูดสั่งการได้ทันที เช่น "เปิดเพลง", "ช่วยสรุปตารางงานวันนี้", "สภาพอากาศเป็นอย่างไร"',
     source: 'manual',
     created_at: new Date().toISOString(),
   },
   {
     id: 'kn_2',
-    title: 'สเปคและขอบเขตงาน Bo AI v1.0',
-    content: 'Bo AI เป็น Desktop Assistant ทำงานใน System Tray รันบน Windows 10/11 ใช้สถาปัตยกรรม Privacy-first จัดเก็บฐานข้อมูล SQLite ภายในเครื่อง',
+    title: 'สเปคและขอบเขตงาน Noar AI v1.0',
+    content: 'Noar AI เป็น Desktop Assistant ทำงานใน System Tray รันบน Windows 10/11 ใช้สถาปัตยกรรม Privacy-first จัดเก็บฐานข้อมูล SQLite ภายในเครื่อง',
     source: 'manual',
     created_at: new Date().toISOString(),
   },
   {
     id: 'kn_music_control',
     title: 'กฎการควบคุมเครื่องเล่นเพลงและระดับเสียง (Music & Volume Rules)',
-    content: 'การควบคุมเพลงของโบ้:\n1. "ปิด" / "ปิดเพลง" / "ปิดไปเลย" -> ปิดเพลงทันที นำแถบเพลงออก สแตนด์บายรอรับคำสั่งใหม่\n2. "พอส" / "pause" / "หยุด" -> พักเพลงชั่วคราว คงแถบเพลงไว้\n3. "เปิด" / "บอกเปิด" / "เล่นต่อ" / "เปิดต่อ" / "resume" -> สั่งเปิดเพลง เล่นเพลงต่อ หรือเริ่มเล่นจากคิวลิสต์ทันที\n4. "เพลงต่อไป" / "เพลงถัดไป" / "เปลี่ยนเพลง" -> สลับเล่นเพลงถัดไปในคิว Playlist\n5. "ลดเสียง" / "เบาเสียง" -> ปรับลดระดับเสียงลงทีละ 10%\n6. "ลดมาก" / "ลดเยอะๆ" -> ปรับระดับเสียงลงเหลือ 20% ของหลอดเสียงทันที (ไม่ได้ลดทีละ 20% แต่ตั้งค่าเป็น 20% พอดี)\n7. "ลดต่ำ" -> ปรับระดับเสียงลงเหลือ 10% ของหลอดเสียง\n8. "ปิดเสียง" (Mute) / "เปิดเสียง" (Unmute)\n9. "remote เปิด" / "เปิดในเครื่อง" / "เปิดบนคอม" -> โบ้ Remote สั่งระบบ Windows เปิดหน้าต่างเพลงบนเบราว์เซอร์หลักของเครื่องผู้ใช้โดยตรง',
+    content: 'การควบคุมเพลงของโนอา:\n1. "ปิด" / "ปิดเพลง" / "ปิดไปเลย" -> ปิดเพลงทันที นำแถบเพลงออก สแตนด์บายรอรับคำสั่งใหม่\n2. "พอส" / "pause" / "หยุด" -> พักเพลงชั่วคราว คงแถบเพลงไว้\n3. "เปิด" / "บอกเปิด" / "เล่นต่อ" / "เปิดต่อ" / "resume" -> สั่งเปิดเพลง เล่นเพลงต่อ หรือเริ่มเล่นจากคิวลิสต์ทันที\n4. "เพลงต่อไป" / "เพลงถัดไป" / "เปลี่ยนเพลง" -> สลับเล่นเพลงถัดไปในคิว Playlist\n5. "ลดเสียง" / "เบาเสียง" -> ปรับลดระดับเสียงลงทีละ 10%\n6. "ลดมาก" / "ลดเยอะๆ" -> ปรับระดับเสียงลงเหลือ 20% ของหลอดเสียงทันที (ไม่ได้ลดทีละ 20% แต่ตั้งค่าเป็น 20% พอดี)\n7. "ลดต่ำ" -> ปรับระดับเสียงลงเหลือ 10% ของหลอดเสียง\n8. "ปิดเสียง" (Mute) / "เปิดเสียง" (Unmute)\n9. "remote เปิด" / "เปิดในเครื่อง" / "เปิดบนคอม" -> โนอา Remote สั่งระบบ Windows เปิดหน้าต่างเพลงบนเบราว์เซอร์หลักของเครื่องผู้ใช้โดยตรง',
     source: 'manual',
     created_at: new Date().toISOString(),
   }
@@ -110,7 +121,7 @@ const DEFAULT_KNOWLEDGE: KnowledgeItem[] = [
 const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_1',
-    user_query: 'น้องโบ วันนี้อากาศที่กรุงเทพเป็นยังไงบ้าง?',
+    user_query: 'โนอา วันนี้อากาศที่กรุงเทพเป็นยังไงบ้าง?',
     expected_response: 'วันนี้ที่กรุงเทพฯ ท้องฟ้าแจ่มใส อุณหภูมิประมาณ 32°C มีโอกาสฝนตกเล็กน้อย 20% ค่ะ',
     notes: 'ตอบกระชับ ให้ข้อมูลครบตรงประเด็น',
     rating: 5,
@@ -119,7 +130,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_2',
     user_query: 'ช่วยเปิดเพลงให้ฟังหน่อย',
-    expected_response: 'เปิดเพลงให้เรียบร้อยแล้วค่ะ 🎵🎧',
+    expected_response: 'เปิดเพลงให้เรียบร้อยแล้วค่ะ',
     notes: 'ตอบรับคำสั่งเปิดเพลงทันที สั้นกระชับ',
     rating: 5,
     category: 'music',
@@ -127,7 +138,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_open_short',
     user_query: 'เปิด',
-    expected_response: 'เปิดเพลงต่อให้แล้วนะคะ 🎵▶️',
+    expected_response: 'เปิดเพลงต่อให้แล้วนะคะ',
     notes: 'บอกเปิดคือสั่งเปิดเพลงทันที',
     rating: 5,
     category: 'music',
@@ -135,15 +146,15 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_open_tell',
     user_query: 'บอกเปิด',
-    expected_response: 'เปิดเพลงต่อให้แล้วนะคะ 🎵▶️',
+    expected_response: 'เปิดเพลงต่อให้แล้วนะคะ',
     notes: 'สั่งบอกเปิด คือเริ่มเล่นเพลงทันที',
     rating: 5,
     category: 'music',
   },
   {
     id: 'ex_music_remote',
-    user_query: 'ให้โบ้ remote เปิดในเครื่องเราได้ไหม',
-    expected_response: 'เปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วค่ะ 🖥️🎵',
+    user_query: 'ให้โนอา remote เปิดในเครื่องเราได้ไหม',
+    expected_response: 'เปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วค่ะ',
     notes: 'Remote สั่งเปิดเบราว์เซอร์บนเครื่อง Windows ของผู้ใช้',
     rating: 5,
     category: 'music',
@@ -151,7 +162,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_remote_command',
     user_query: 'remote เปิดในเครื่อง',
-    expected_response: 'เปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วค่ะ 🖥️🎵',
+    expected_response: 'เปิดเพลงบนเบราว์เซอร์ในเครื่องให้เรียบร้อยแล้วค่ะ',
     notes: 'สั่ง Remote เปิดเพลงบนเครื่อง',
     rating: 5,
     category: 'music',
@@ -159,7 +170,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_stop',
     user_query: 'ปิดเพลง',
-    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วค่ะ ⏹️',
+    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วค่ะ',
     notes: 'ปิดเพลง ปิดแถบเพลงทันที',
     rating: 5,
     category: 'music',
@@ -167,7 +178,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_stop_short',
     user_query: 'ปิด',
-    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วค่ะ ⏹️',
+    expected_response: 'ปิดเพลงให้เรียบร้อยแล้วค่ะ',
     notes: 'บอกปิดคือปิดเพลงทันที',
     rating: 5,
     category: 'music',
@@ -175,7 +186,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_pause',
     user_query: 'พอส',
-    expected_response: 'พักเพลงไว้ชั่วคราวแล้วนะคะ ⏸️',
+    expected_response: 'พักเพลงไว้ชั่วคราวแล้วนะคะ',
     notes: 'พอส คือพอส หยุดชั่วคราว',
     rating: 5,
     category: 'music',
@@ -183,7 +194,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_resume',
     user_query: 'เล่นต่อ',
-    expected_response: 'เปิดเพลงต่อให้แล้วนะคะ 🎵▶️',
+    expected_response: 'เปิดเพลงต่อให้แล้วนะคะ',
     notes: 'เล่นต่อ คือเล่นต่อ เล่นเพลงเดิมต่อ',
     rating: 5,
     category: 'music',
@@ -191,7 +202,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_next',
     user_query: 'เพลงต่อไป',
-    expected_response: 'เปลี่ยนเป็นเพลงถัดไปให้แล้วค่ะ ⏭️🎵',
+    expected_response: 'เปลี่ยนเป็นเพลงถัดไปให้แล้วค่ะ',
     notes: 'เลือกเพลงต่อไปมาเล่นในลิสต์คิว',
     rating: 5,
     category: 'music',
@@ -199,7 +210,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_vol_down',
     user_query: 'ลดเสียง',
-    expected_response: 'เบาเสียงเพลงลงแล้วค่ะ 🔉',
+    expected_response: 'เบาเสียงเพลงลงแล้วค่ะ',
     notes: 'ลดเสียงลงทีละ 10%',
     rating: 5,
     category: 'music',
@@ -207,7 +218,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_vol_much',
     user_query: 'ลดมาก',
-    expected_response: 'ปรับลดเสียงลงเหลือ 20% ของหลอดเสียงให้แล้วนะคะ 🔉',
+    expected_response: 'ปรับลดเสียงลงเหลือ 20% ของหลอดเสียงให้แล้วนะคะ',
     notes: 'ลดมาก คือลดลงเหลือ 20% ของหลอดเสียงทันที',
     rating: 5,
     category: 'music',
@@ -215,7 +226,7 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_vol_low',
     user_query: 'ลดต่ำ',
-    expected_response: 'ปรับลดเสียงต่ำลงแล้วค่ะ 🔈',
+    expected_response: 'ปรับลดเสียงต่ำลงแล้วค่ะ',
     notes: 'ลดต่ำ คือลดลงเหลือ 10% ของหลอดเสียง',
     rating: 5,
     category: 'music',
@@ -223,16 +234,64 @@ const DEFAULT_EXAMPLES: ExampleTrainingItem[] = [
   {
     id: 'ex_music_mute',
     user_query: 'ปิดเสียง',
-    expected_response: 'ปิดเสียงเพลงแล้วค่ะ (Muted) 🔇',
+    expected_response: 'ปิดเสียงเพลงแล้วค่ะ (Muted)',
     notes: 'ปิดเสียง (Mute)',
     rating: 5,
     category: 'music',
+  },
+  {
+    id: 'ex_reminder_query',
+    user_query: 'ตอนนี้เรามีแจ้งเตือนอะไรบ้าง',
+    expected_response: 'รายการแจ้งเตือนและตารางงานของคุณมีดังนี้ค่ะ',
+    notes: 'เรียกดูรายการแจ้งเตือนและตารางงาน (ไม่ทำการบันทึกซ้ำ)',
+    rating: 5,
+    category: 'tools',
+  },
+  {
+    id: 'ex_schedule_save',
+    user_query: 'บันทึกตารางงานส่งโปรเจกต์ตอนบ่ายสองให้หน่อย',
+    expected_response: 'บันทึกรายการตารางงานและการแจ้งเตือนเรื่อง "ส่งโปรเจกต์" (เวลา: ตอนบ่ายสอง) เรียบร้อยแล้วค่ะ',
+    notes: 'บันทึกตารางงานด้วยคำสั่ง explicit "บันทึก...ให้หน่อย"',
+    rating: 5,
+    category: 'tools',
+  },
+  {
+    id: 'ex_schedule_export',
+    user_query: 'โนอา export ให้เราด้วยจะได้มั้ย',
+    expected_response: 'โนอาส่งออก (Export) ตารางงานและการแจ้งเตือนทั้งหมดเป็นไฟล์ CSV ให้เรียบร้อยแล้วค่ะ',
+    notes: 'ส่งออกไฟล์ CSV ตารางงานและการแจ้งเตือน',
+    rating: 5,
+    category: 'tools',
+  },
+  {
+    id: 'ex_schedule_line',
+    user_query: 'ช่วยส่งตารางของวันนี้ไปที่ไลน์ให้หน่อย',
+    expected_response: 'โนอาส่งตารางงานของวันนี้ไปที่ LINE ให้เรียบร้อยแล้วค่ะ',
+    notes: 'ส่งการแจ้งเตือนตารางงานเข้า LINE OA เฉพาะเมื่อสั่งแบบ explicit',
+    rating: 5,
+    category: 'tools',
+  },
+  {
+    id: 'ex_check_storage',
+    user_query: 'เช็ค storage ให้หน่อย',
+    expected_response: 'ตอนนี้โนอาใช้งานพื้นที่จัดเก็บไปแล้วจากโควต้าสูงสุดค่ะ',
+    notes: 'ตรวจสอบขนาดพื้นที่จัดเก็บและโควต้าสูงสุด (GB)',
+    rating: 5,
+    category: 'system',
+  },
+  {
+    id: 'ex_clear_storage',
+    user_query: 'โนอา เคลียร์ storage ให้หน่อย',
+    expected_response: 'โนอาเคลียร์ประวัติแชทและล้างแคชข้อมูลชั่วคราวให้เรียบร้อยแล้วค่ะ',
+    notes: 'สั่งล้างเคลียร์พื้นที่ Storage คืนความจุ',
+    rating: 5,
+    category: 'system',
   }
 ];
 
 const DEFAULT_REMINDERS: ReminderItem[] = [
-  { id: 'rem_1', title: 'ประชุมวางแผนโครงการ Bo AI สัปดาห์นี้', time: '14:00 น.', completed: false },
-  { id: 'rem_2', title: 'พักสายตาและดื่มน้ำ 1 แก้ว', time: '16:00 น.', completed: true },
+  { id: 'rem_1', title: 'ประชุมวางแผนโครงการ Noar AI สัปดาห์นี้', time: '14:00 น.', completed: false, createdAt: new Date().toISOString() },
+  { id: 'rem_2', title: 'พักสายตาและดื่มน้ำ 1 แก้ว', time: '16:00 น.', completed: true, createdAt: new Date().toISOString() },
 ];
 
 export class DatabaseService {
@@ -269,20 +328,21 @@ export class DatabaseService {
         if (!parsed.meta_api_key && DEFAULT_SETTINGS.meta_api_key) {
           parsed.meta_api_key = DEFAULT_SETTINGS.meta_api_key;
         }
-        parsed.wake_word = 'โบ้';
+        parsed.wake_word = 'โนอา';
         parsed.tts_engine = 'natural_female';
         if (!parsed.tts_rate || parsed.tts_rate <= 1.05) {
           parsed.tts_rate = 1.20;
         }
         parsed.alternate_names = Array.from(new Set([
-          ...(parsed.alternate_names || []),
-          'ไอ้โบ้', 'ไอโบ้', 'น้องโบ', 'โบ', 'บักโบ้', 'ไอ้โบว์', 'ไอโบว์', 'น้องโบว์', 'โบว์', 'Bo AI'
+          'น้องโนอา', 'ไอ้โนอา', 'คุณโนอา', 'โนอาห์', 'Noar', 'Noar AI', 'Hey Noar',
+          ...(parsed.alternate_names || []).filter((n: string) => !['โบ้', 'โนอา'].includes(n)),
+          'ไอ้โบ้', 'น้องโบ', 'โบ้', 'Bo AI'
         ]));
         this.saveSettings(parsed);
       } catch (_) {}
     }
     const rawPers = localStorage.getItem(STORAGE_KEYS.PERSONALITY);
-    if (!rawPers || rawPers.includes('เพื่อนสนิทคู่หู') || rawPers.includes('แก') || rawPers.includes('หางเสียง')) {
+    if (!rawPers || rawPers.includes('เพื่อนสนิทคู่หู') || rawPers.includes('แก') || rawPers.includes('หางเสียง') || rawPers.includes('"โบ้"')) {
       this.savePersonality(DEFAULT_PERSONALITY);
     }
     if (!localStorage.getItem(STORAGE_KEYS.MEMORIES)) {
@@ -314,9 +374,9 @@ export class DatabaseService {
       let hasUpdates = false;
       const updatedEx = currentEx.map(ex => {
         const def = defaultMap.get(ex.id);
-        if (def && (ex.expected_response.includes('แก') || ex.expected_response.includes('ชิลๆ'))) {
+        if (def && (ex.expected_response.includes('แก') || ex.expected_response.includes('ชิลๆ') || ex.user_query.includes('โบ'))) {
           hasUpdates = true;
-          return { ...ex, expected_response: def.expected_response, notes: def.notes };
+          return { ...ex, user_query: def.user_query, expected_response: def.expected_response, notes: def.notes };
         }
         return ex;
       });
@@ -332,7 +392,7 @@ export class DatabaseService {
     if (!localStorage.getItem(STORAGE_KEYS.CONVERSATIONS)) {
       const initialConv: Conversation = {
         id: 'conv_default',
-        title: 'เริ่มต้นพูดคุยกับโบ้',
+        title: 'เริ่มต้นพูดคุยกับโนอา',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -342,7 +402,7 @@ export class DatabaseService {
           id: 'msg_welcome',
           conversation_id: 'conv_default',
           role: 'assistant',
-          content: 'สวัสดีค่ะ โบ้พร้อมรับคำสั่งแล้วนะคะ เรียก "โบ้" แล้วสั่งการหรือพูดคุยได้เลยค่ะ',
+          content: 'สวัสดีค่ะ โนอาพร้อมรับคำสั่งแล้วนะคะ เรียก "โนอา" แล้วสั่งการหรือพูดคุยได้เลยค่ะ',
           created_at: new Date().toISOString(),
         }
       ];
@@ -638,7 +698,7 @@ export class DatabaseService {
     }
   }
 
-  // Reminders
+  // Reminders & Work Schedule
   public getReminders(): ReminderItem[] {
     const raw = localStorage.getItem(STORAGE_KEYS.REMINDERS);
     return raw ? JSON.parse(raw) : [];
@@ -646,15 +706,20 @@ export class DatabaseService {
 
   public saveReminders(items: ReminderItem[]): void {
     localStorage.setItem(STORAGE_KEYS.REMINDERS, JSON.stringify(items));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('noar-reminders-updated', { detail: { items } }));
+    }
   }
 
-  public addReminder(title: string, time: string): ReminderItem {
+  public addReminder(title: string, time: string, location?: string): ReminderItem {
     const items = this.getReminders();
     const newItem: ReminderItem = {
       id: 'rem_' + Date.now(),
       title,
       time,
+      location: location?.trim() || undefined,
       completed: false,
+      createdAt: new Date().toISOString(),
     };
     items.unshift(newItem);
     this.saveReminders(items);
@@ -669,6 +734,215 @@ export class DatabaseService {
   public deleteReminder(id: string): void {
     const items = this.getReminders().filter(r => r.id !== id);
     this.saveReminders(items);
+  }
+
+  // Smart single or filtered reminder deletion (by keyword, index, or completion status)
+  public removeReminderSmart(query: { type: 'index' | 'completed' | 'keyword'; index?: number; keyword?: string }): DeleteReminderResult {
+    const reminders = this.getReminders();
+    if (reminders.length === 0) {
+      return { status: 'empty', remainingCount: 0 };
+    }
+
+    if (query.type === 'completed') {
+      const completedItems = reminders.filter(r => r.completed);
+      if (completedItems.length === 0) {
+        return { status: 'not_found', keyword: 'งานที่เสร็จแล้ว', remainingCount: reminders.length };
+      }
+      const remaining = reminders.filter(r => !r.completed);
+      this.saveReminders(remaining);
+      return {
+        status: 'deleted',
+        deletedCount: completedItems.length,
+        deletedItem: completedItems[0],
+        remainingCount: remaining.length,
+        keyword: 'งานที่เสร็จแล้ว',
+      };
+    }
+
+    if (query.type === 'index') {
+      const idx = query.index;
+      if (idx !== undefined && idx >= 1 && idx <= reminders.length) {
+        const target = reminders[idx - 1];
+        const remaining = reminders.filter((_, i) => i !== idx - 1);
+        this.saveReminders(remaining);
+        return {
+          status: 'deleted',
+          deletedItem: target,
+          deletedCount: 1,
+          remainingCount: remaining.length,
+          index: idx,
+        };
+      } else {
+        return {
+          status: 'not_found',
+          index: idx,
+          remainingCount: reminders.length,
+          allReminders: reminders,
+        };
+      }
+    }
+
+    // Keyword or generic removal request
+    const kw = (query.keyword || '').trim();
+    if (!kw) {
+      if (reminders.length === 1) {
+        const target = reminders[0];
+        this.saveReminders([]);
+        return {
+          status: 'deleted',
+          deletedItem: target,
+          deletedCount: 1,
+          remainingCount: 0,
+        };
+      } else {
+        return {
+          status: 'need_selection',
+          remainingCount: reminders.length,
+          allReminders: reminders,
+        };
+      }
+    }
+
+    const cleanKw = kw.toLowerCase();
+    const matches = reminders.filter(r =>
+      r.title.toLowerCase().includes(cleanKw) || cleanKw.includes(r.title.toLowerCase())
+    );
+
+    if (matches.length === 1) {
+      const target = matches[0];
+      const remaining = reminders.filter(r => r.id !== target.id);
+      this.saveReminders(remaining);
+      return {
+        status: 'deleted',
+        deletedItem: target,
+        deletedCount: 1,
+        remainingCount: remaining.length,
+        keyword: kw,
+      };
+    } else if (matches.length > 1) {
+      return {
+        status: 'multiple_matches',
+        matches,
+        remainingCount: reminders.length,
+        keyword: kw,
+      };
+    } else {
+      return {
+        status: 'not_found',
+        keyword: kw,
+        remainingCount: reminders.length,
+        allReminders: reminders,
+      };
+    }
+  }
+
+  // Smart reminder completion toggle
+  public completeReminderSmart(query: { index?: number; keyword?: string }): CompleteReminderResult {
+    const reminders = this.getReminders();
+    if (reminders.length === 0) {
+      return { status: 'empty', remainingPendingCount: 0 };
+    }
+
+    let target: ReminderItem | undefined;
+
+    if (query.index !== undefined) {
+      const idx = query.index;
+      if (idx >= 1 && idx <= reminders.length) {
+        target = reminders[idx - 1];
+      }
+    } else if (!query.keyword || query.keyword.trim() === '') {
+      const pending = reminders.filter(r => !r.completed);
+      if (pending.length === 1) {
+        target = pending[0];
+      } else if (pending.length > 1) {
+        return {
+          status: 'need_selection',
+          remainingPendingCount: pending.length,
+          allPending: pending,
+        };
+      }
+    } else {
+      const cleanKw = query.keyword.trim().toLowerCase();
+      target = reminders.find(r =>
+        r.title.toLowerCase().includes(cleanKw) || cleanKw.includes(r.title.toLowerCase())
+      );
+    }
+
+    if (!target) {
+      return {
+        status: 'not_found',
+        keyword: query.keyword,
+        index: query.index,
+        remainingPendingCount: reminders.filter(r => !r.completed).length,
+      };
+    }
+
+    if (target.completed) {
+      return {
+        status: 'already_completed',
+        item: target,
+        remainingPendingCount: reminders.filter(r => !r.completed).length,
+      };
+    }
+
+    const updated = reminders.map(r => r.id === target!.id ? { ...r, completed: true } : r);
+    this.saveReminders(updated);
+    const pendingCount = updated.filter(r => !r.completed).length;
+
+    return {
+      status: 'completed',
+      item: target,
+      remainingPendingCount: pendingCount,
+    };
+  }
+
+  // LINE Official Account Integration
+  public getLineUserId(): string {
+    return localStorage.getItem(STORAGE_KEYS.LINE_USER_ID) || this.getSettings().line_user_id || '';
+  }
+
+  public setLineUserId(userId: string): void {
+    localStorage.setItem(STORAGE_KEYS.LINE_USER_ID, userId.trim());
+    const settings = this.getSettings();
+    settings.line_user_id = userId.trim();
+    this.saveSettings(settings);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('noar-line-user-updated', { detail: { userId: userId.trim() } }));
+    }
+  }
+
+  // Export Reminders & Work Schedule as UTF-8 BOM CSV (compatible with Excel & Google Sheets)
+  public exportRemindersCSV(): string {
+    const reminders = this.getReminders();
+    const header = ['ลำดับ', 'หัวข้อ/ตารางงาน', 'เวลานัดหมาย', 'สถานที่', 'สถานะ', 'วันที่บันทึก'];
+    const rows = reminders.map((r, i) => {
+      const status = r.completed ? 'เสร็จสิ้น' : 'รอดำเนินการ';
+      const date = r.createdAt ? new Date(r.createdAt).toLocaleDateString('th-TH') : '-';
+      const cleanTitle = `"${(r.title || '').replace(/"/g, '""')}"`;
+      const cleanTime = `"${(r.time || '').replace(/"/g, '""')}"`;
+      const cleanLoc = `"${(r.location || '-').replace(/"/g, '""')}"`;
+      return [i + 1, cleanTitle, cleanTime, cleanLoc, `"${status}"`, `"${date}"`].join(',');
+    });
+    // Prepend UTF-8 BOM (\uFEFF) so Excel opens Thai characters accurately without encoding issues
+    return '\uFEFF' + [header.join(','), ...rows].join('\r\n');
+  }
+
+  // Generic File Downloader helper for CSV / JSON / Text in Browser & Electron
+  public downloadExportFile(content: string, filename: string, mimeType = 'text/csv;charset=utf-8;'): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      console.error('[DatabaseService] downloadExportFile error:', e);
+    }
   }
 
   // Conversations & Messages
@@ -757,6 +1031,197 @@ export class DatabaseService {
     } catch (e) {
       console.error('Import failed:', e);
       return false;
+    }
+  }
+
+  // Format byte size into clean human-readable units (B, KB, MB, GB)
+  public formatBytes(bytes: number): string {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  // Calculate detailed storage usage and progress against configured max storage quota
+  public async getStorageUsageInfo(): Promise<StorageUsageInfo> {
+    const settings = this.getSettings();
+    const maxGb = settings.max_storage_gb && settings.max_storage_gb > 0 ? settings.max_storage_gb : 1;
+    const maxBytes = maxGb * 1024 * 1024 * 1024;
+
+    let chatBytes = 0;
+    let memoryBytes = 0;
+    let reminderBytes = 0;
+    let knowledgeBytes = 0;
+    let logsBytes = 0;
+    let settingsBytes = 0;
+    let otherBytes = 0;
+
+    if (typeof localStorage !== 'undefined') {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        const val = localStorage.getItem(key) || '';
+        const itemBytes = (key.length + val.length) * 2;
+
+        if (key === STORAGE_KEYS.MESSAGES || key === STORAGE_KEYS.CONVERSATIONS) {
+          chatBytes += itemBytes;
+        } else if (key === STORAGE_KEYS.MEMORIES) {
+          memoryBytes += itemBytes;
+        } else if (key === STORAGE_KEYS.REMINDERS) {
+          reminderBytes += itemBytes;
+        } else if (key === STORAGE_KEYS.KNOWLEDGE || key === STORAGE_KEYS.EXAMPLES) {
+          knowledgeBytes += itemBytes;
+        } else if (key === STORAGE_KEYS.AUDIT_LOGS) {
+          logsBytes += itemBytes;
+        } else if (key === STORAGE_KEYS.SETTINGS || key === STORAGE_KEYS.PERSONALITY) {
+          settingsBytes += itemBytes;
+        } else {
+          otherBytes += itemBytes;
+        }
+      }
+    }
+
+    const totalLocalStorage = chatBytes + memoryBytes + reminderBytes + knowledgeBytes + logsBytes + settingsBytes + otherBytes;
+    let totalEstimatedBytes = totalLocalStorage;
+
+    if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
+      try {
+        const estimate = await navigator.storage.estimate();
+        if (estimate.usage && estimate.usage > totalEstimatedBytes) {
+          const extraUsage = estimate.usage - totalLocalStorage;
+          otherBytes += extraUsage;
+          totalEstimatedBytes = estimate.usage;
+        }
+      } catch (e) {
+        // Fallback to localStorage size
+      }
+    }
+
+    const usagePercentage = Math.min(100, Number(((totalEstimatedBytes / maxBytes) * 100).toFixed(2)));
+    const isNearLimit = usagePercentage >= 80;
+    const isOverLimit = usagePercentage >= 100;
+
+    const categories: StorageCategoryBreakdown[] = [
+      {
+        name: 'ประวัติแชท (Chat Messages)',
+        bytes: chatBytes,
+        formatted: this.formatBytes(chatBytes),
+        percentage: totalEstimatedBytes > 0 ? Number(((chatBytes / totalEstimatedBytes) * 100).toFixed(1)) : 0,
+        color: '#6366f1', // Indigo
+      },
+      {
+        name: 'ความจำ & ข้อมูลเทรน (Memories & Knowledge)',
+        bytes: memoryBytes + knowledgeBytes,
+        formatted: this.formatBytes(memoryBytes + knowledgeBytes),
+        percentage: totalEstimatedBytes > 0 ? Number((((memoryBytes + knowledgeBytes) / totalEstimatedBytes) * 100).toFixed(1)) : 0,
+        color: '#06b6d4', // Cyan
+      },
+      {
+        name: 'ตารางงาน & แจ้งเตือน (Schedule & Reminders)',
+        bytes: reminderBytes,
+        formatted: this.formatBytes(reminderBytes),
+        percentage: totalEstimatedBytes > 0 ? Number(((reminderBytes / totalEstimatedBytes) * 100).toFixed(1)) : 0,
+        color: '#a855f7', // Purple/Violet
+      },
+      {
+        name: 'บันทึกระบบ & แคช (Logs & Cache)',
+        bytes: logsBytes + otherBytes,
+        formatted: this.formatBytes(logsBytes + otherBytes),
+        percentage: totalEstimatedBytes > 0 ? Number((((logsBytes + otherBytes) / totalEstimatedBytes) * 100).toFixed(1)) : 0,
+        color: '#10b981', // Emerald
+      },
+      {
+        name: 'การตั้งค่าระบบ (Settings)',
+        bytes: settingsBytes,
+        formatted: this.formatBytes(settingsBytes),
+        percentage: totalEstimatedBytes > 0 ? Number(((settingsBytes / totalEstimatedBytes) * 100).toFixed(1)) : 0,
+        color: '#f59e0b', // Amber
+      },
+    ];
+
+    return {
+      totalBytes: totalEstimatedBytes,
+      formattedTotal: this.formatBytes(totalEstimatedBytes),
+      maxBytes,
+      formattedMax: `${maxGb} GB`,
+      usagePercentage,
+      isNearLimit,
+      isOverLimit,
+      categories,
+    };
+  }
+
+  // Clear specific storage categories
+  public clearChatStorage(): void {
+    localStorage.removeItem(STORAGE_KEYS.MESSAGES);
+    localStorage.removeItem(STORAGE_KEYS.CONVERSATIONS);
+    this.notifyStorageUpdated();
+  }
+
+  public clearRemindersStorage(): void {
+    localStorage.removeItem(STORAGE_KEYS.REMINDERS);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('noar-reminders-updated'));
+    }
+    this.notifyStorageUpdated();
+  }
+
+  public clearAuditLogs(): void {
+    localStorage.removeItem(STORAGE_KEYS.AUDIT_LOGS);
+    this.notifyStorageUpdated();
+  }
+
+  public async clearCacheStorage(): Promise<void> {
+    if (typeof caches !== 'undefined') {
+      try {
+        const keys = await caches.keys();
+        for (const k of keys) {
+          await caches.delete(k);
+        }
+      } catch (e) {
+        console.warn('Failed to clear cacheStorage:', e);
+      }
+    }
+    this.clearAuditLogs();
+    this.notifyStorageUpdated();
+  }
+
+  public async clearAllStorage(preserveSettings = true): Promise<void> {
+    const savedSettings = preserveSettings ? this.getSettings() : null;
+    const savedPersonality = preserveSettings ? this.getPersonality() : null;
+
+    if (typeof caches !== 'undefined') {
+      try {
+        const keys = await caches.keys();
+        for (const k of keys) {
+          await caches.delete(k);
+        }
+      } catch (e) {}
+    }
+
+    localStorage.clear();
+
+    if (savedSettings) this.saveSettings(savedSettings);
+    if (savedPersonality) this.savePersonality(savedPersonality);
+
+    this.initDefaults();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('noar-reminders-updated'));
+    }
+    this.notifyStorageUpdated();
+  }
+
+  public setMaxStorageLimit(gb: number): void {
+    const settings = this.getSettings();
+    settings.max_storage_gb = gb;
+    this.saveSettings(settings);
+    this.notifyStorageUpdated();
+  }
+
+  public notifyStorageUpdated(): void {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('noar-storage-updated'));
     }
   }
 }

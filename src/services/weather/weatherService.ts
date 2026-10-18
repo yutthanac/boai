@@ -193,7 +193,7 @@ const WEATHER_STOP_WORDS = new Set([
   'ไหม', 'มั้ย', 'พรุ่งนี้', 'มะรืนนี้', 'วันนี้', 'ตอนนี้', 'ด้วย', 'สิ', 'นะ', 'ครับ',
   'ค่ะ', 'จ้า', 'ที', 'หน่อยสิ', 'อยากรู้', 'บ้าง', 'วันพรุ่งนี้', 'วันมะรืน', 'พรุ่ง',
   'มะรืน', 'สภาพอากาศ', 'อากาศ', 'อุณหภูมิ', 'ฝนตกไหม', 'ฝนตกมั้ย', 'แดด', 'หนาว',
-  'ร้อน', 'แก', 'ไอ้โบ้', 'โบ้', 'น้องโบ', 'ช่วยดู', 'หน่อยนะ', 'ด้วยนะ', 'รึเปล่า', 'หรือเปล่า'
+  'ร้อน', 'แก', 'โนอา', 'น้องโนอา', 'ไอ้โนอา', 'โนอาห์', 'noar', 'noah', 'ไอ้โบ้', 'โบ้', 'น้องโบ', 'ช่วยดู', 'หน่อยนะ', 'ด้วยนะ', 'รึเปล่า', 'หรือเปล่า'
 ]);
 
 export class WeatherService {
@@ -416,7 +416,7 @@ export class WeatherService {
       const min = weather.tempMin ?? (weather.temperature - 6);
       const rain = weather.rainProbability ?? 0;
 
-      return `พยากรณ์อากาศ${timeLabel}ที่ ${cityName} ${emoji} ${cond} อุณหภูมิสูงสุด ${max}°C ต่ำสุด ${min}°C โอกาสฝนตก ${rain}% ค่ะ ${advice}`;
+      return `พยากรณ์อากาศ${timeLabel}ที่ ${cityName} ${cond} อุณหภูมิสูงสุด ${max}°C ต่ำสุด ${min}°C โอกาสฝนตก ${rain}% ค่ะ ${advice}`;
     }
 
     // Current Live Weather Response
@@ -424,7 +424,7 @@ export class WeatherService {
     const feel = weather.apparentTemperature;
     const humidity = weather.humidity;
 
-    return `สภาพอากาศที่ ${cityName} ตอนนี้ ${emoji} ${cond} อุณหภูมิ ${temp}°C (รู้สึกเหมือน ${feel}°C) ความชื้น ${humidity}% ค่ะ ${advice}`;
+    return `สภาพอากาศที่ ${cityName} ตอนนี้ ${cond} อุณหภูมิ ${temp}°C (รู้สึกเหมือน ${feel}°C) ความชื้น ${humidity}% ค่ะ ${advice}`;
   }
 }
 

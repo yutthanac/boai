@@ -45,7 +45,7 @@ export class MusicService {
 
     // 1. Initial cleanup of common Thai and English vocatives and playback command prefixes
     const prefixesToRemove = [
-      /^(?:ไอ้โบว์|ไอโบว์|น้องโบว์|โบว์|ไอ้โบ้|ไอโบ้|น้องโบ|บักโบ้|โบ้|ไอ้โบ|ไอโบ|โบไอ|โลไอ|bo\s*ai|boai)\s*[,.:;]?\s*/gi,
+      /^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noarai|noar|noah|hey\s*noar|hey\s*noah|ไอ้โบว์|ไอโบว์|น้องโบว์|โบว์|ไอ้โบ้|ไอโบ้|น้องโบ|บักโบ้|โบ้|ไอ้โบ|ไอโบ|โบไอ|โลไอ|bo\s*ai|boai)\s*[,.:;]?\s*/gi,
       /^(?:ช่วย|รบกวน|กรุณา|วาน|บอก)\s*/gi,
       /^(?:ขอเปลี่ยนเพลงเป็น|ขอเปลี่ยนเพลง|ขอเปลี่ยนเป็น|เปลี่ยนเพลงเป็น|เปลี่ยนเพลง|เปลี่ยนเป็น)\s*/gi,
       /^(?:ช่วยเปิดเพลง|ช่วยหาเพลง|ช่วยเปิด|เปิดเพลง|เล่นเพลง|ฟังเพลง|ขอเพลง|หาเพลง|เปิดให้ฟังหน่อย|เปิดให้หน่อย|เล่นให้หน่อย|เล่นให้ฟังหน่อย)\s*/gi,
@@ -226,8 +226,8 @@ export class MusicService {
   public isMusicControlIntent(text: string): MusicControlIntent | null {
     let raw = text.toLowerCase().trim();
 
-    // Strip leading conversational vocatives / polite prefixes (e.g., "ไอ้โบว์", "โบ้", "น้องโบ", "ช่วยลดเสียงหน่อย")
-    raw = raw.replace(/^(?:ไอ้โบว์|ไอโบว์|น้องโบว์|โบว์|ไอ้โบ้|ไอโบ้|น้องโบ|บักโบ้|โบ้|ไอ้โบ|ไอโบ|bo\s*ai|boai|ช่วย|ช่วยหน่อย|รบกวน|กรุณา)\s*[,.:;]?\s*/gi, '').trim();
+    // Strip leading conversational vocatives / polite prefixes (e.g., "โนอา", "น้องโนอา", "ไอ้โบว์", "โบ้", "น้องโบ", "ช่วยลดเสียงหน่อย")
+    raw = raw.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noarai|noar|noah|ไอ้โบว์|ไอโบว์|น้องโบว์|โบว์|ไอ้โบ้|ไอโบ้|น้องโบ|บักโบ้|โบ้|ไอ้โบ|ไอโบ|bo\s*ai|boai|ช่วย|ช่วยหน่อย|รบกวน|กรุณา)\s*[,.:;]?\s*/gi, '').trim();
 
     // Do NOT capture as local control if user specifically asked for remote PC browser playback
     if (/(?:remote|รีโมท|ในเครื่อง|บนเครื่อง|ในคอม|บนคอม|เบราว์เซอร์)/i.test(raw)) {
@@ -321,7 +321,7 @@ export class MusicService {
   // Check if text is a new song playback request or remote PC launch
   public isMusicIntent(text: string): boolean {
     let raw = text.toLowerCase().trim();
-    raw = raw.replace(/^(?:ไอ้โบ้|ไอโบ้|น้องโบ|บักโบ้|โบ้|bo\s*ai|boai|ช่วย|ช่วยหน่อย|รบกวน|กรุณา)\s*[,.:;]?\s*/gi, '').trim();
+    raw = raw.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noarai|noar|noah|ไอ้โบ้|ไอโบ้|น้องโบ|บักโบ้|โบ้|bo\s*ai|boai|ช่วย|ช่วยหน่อย|รบกวน|กรุณา)\s*[,.:;]?\s*/gi, '').trim();
 
     // Check if user explicitly asked to stop, pause, skip, or change volume
     const control = this.isMusicControlIntent(text);

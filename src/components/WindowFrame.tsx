@@ -40,10 +40,10 @@ export const WindowFrame: React.FC = () => {
       {/* Left: App Title and Icon */}
       <div className="flex items-center gap-2.5 window-no-drag">
         <div className="w-6 h-6 rounded-md bg-white p-0.5 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
-          <img src="/bobo.png" alt="Bo AI" className="w-full h-full object-contain rounded-sm" />
+          <img src="/bobo.png" alt="Noar AI" className="w-full h-full object-contain rounded-sm" />
         </div>
         <span className="font-semibold text-xs tracking-wide text-slate-200">
-          BO AI <span className="text-[11px] font-normal text-slate-400">(น้องโบ)</span>
+          NOAR AI <span className="text-[11px] font-normal text-slate-400">(โนอา)</span>
         </span>
 
         {/* Status Pill */}

@@ -280,5 +280,76 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       return { success: false, message: e?.message || 'การสั่งการล้มเหลว' };
     }
   });
+
+  // LINE Official Account Message Dispatcher (Push or Broadcast via Node https)
+  ipcMain.handle('send-line-message', async (_event, params: { token: string; to?: string; message: string; broadcastIfNoTo?: boolean }) => {
+    try {
+      const { token, to, message, broadcastIfNoTo } = params || {};
+      if (!token) return { success: false, error: 'Missing LINE Channel Access Token' };
+      if (!message) return { success: false, error: 'Empty message text' };
+
+      const useBroadcast = !to && broadcastIfNoTo;
+      const endpoint = useBroadcast
+        ? 'https://api.line.me/v2/bot/message/broadcast'
+        : 'https://api.line.me/v2/bot/message/push';
+
+      const payload = useBroadcast
+        ? { messages: [{ type: 'text', text: message }] }
+        : { to: to, messages: [{ type: 'text', text: message }] };
+
+      const bodyStr = JSON.stringify(payload);
+
+      return new Promise<{ success: boolean; statusCode?: number; error?: string; data?: any }>((resolve) => {
+        const req = https.request(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'Content-Length': Buffer.byteLength(bodyStr),
+          },
+          timeout: 10000,
+        }, (res) => {
+          let resData = '';
+          res.on('data', chunk => resData += chunk);
+          res.on('end', () => {
+            const isOk = res.statusCode && res.statusCode >= 200 && res.statusCode < 300;
+            if (isOk) {
+              resolve({ success: true, statusCode: res.statusCode });
+            } else {
+              resolve({
+                success: false,
+                statusCode: res.statusCode,
+                error: `LINE API HTTP ${res.statusCode}: ${resData.slice(0, 250)}`,
+              });
+            }
+          });
+        });
+
+        req.on('error', (err) => {
+          resolve({ success: false, error: err.message });
+        });
+
+        req.on('timeout', () => {
+          req.destroy();
+          resolve({ success: false, error: 'LINE Request Timeout' });
+        });
+
+        req.write(bodyStr);
+        req.end();
+      });
+    } catch (e: any) {
+      return { success: false, error: e?.message };
+    }
+  });
+
+  // Get LINE Webhook Server Status
+  ipcMain.handle('get-line-webhook-info', async () => {
+    try {
+      const { lineWebhookServer } = await import('./line-webhook');
+      return lineWebhookServer.getStatus();
+    } catch (e: any) {
+      return { running: false, error: e?.message };
+    }
+  });
 }
 

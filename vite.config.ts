@@ -82,6 +82,39 @@ const ttsPlugin: Plugin = {
         res.end(JSON.stringify({ videoId: null }));
       }
     });
+
+    // LINE Webhook Handler in Vite dev server
+    server.middlewares.use('/api/line/webhook', (req, res) => {
+      if (req.method === 'GET') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({
+          status: 'online',
+          service: 'Noar AI LINE Webhook (Vite Dev Server)',
+          endpoint: '/api/line/webhook',
+          note: 'Ready for LINE Webhook verification via tunnel (e.g. ngrok http 5173)'
+        }, null, 2));
+        return;
+      }
+
+      if (req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            console.log('[Vite LINE Webhook] Received webhook payload:', data);
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: true, count: data.events?.length || 0 }));
+          } catch (e: any) {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: true, warning: e.message }));
+          }
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end('Not found');
+    });
   }
 };
 

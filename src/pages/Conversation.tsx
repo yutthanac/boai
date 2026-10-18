@@ -62,7 +62,7 @@ export const Conversation: React.FC = () => {
     if (!teachUserQuery.trim() || !teachResponse.trim()) return;
     db.addExample(teachUserQuery.trim(), teachResponse.trim(), teachNotes.trim(), teachCategory);
     setQuickTeachMsgId(null);
-    setTeachSavedToast('บันทึกตัวอย่างการเทรนสำเร็จ! โบ้จะจำคำตอบและสไตล์นี้ไปใช้ตอบครั้งถัดไปทันที ✨');
+    setTeachSavedToast('บันทึกตัวอย่างการเทรนสำเร็จ! โนอาจะจำคำตอบและสไตล์นี้ไปใช้ตอบครั้งถัดไปทันที ✨');
     setTimeout(() => {
       setTeachSavedToast(null);
     }, 3500);
@@ -136,11 +136,11 @@ export const Conversation: React.FC = () => {
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-500">
             <div className="w-16 h-16 rounded-2xl bg-white p-2 border border-white/20 flex items-center justify-center mb-3 shadow-md">
-              <img src="/bobo.png" alt="Bo AI" className="w-full h-full object-contain" />
+              <img src="/bobo.png" alt="Noar AI" className="w-full h-full object-contain" />
             </div>
             <p className="text-sm font-medium text-slate-300">ยังไม่มีข้อความในการสนทนานี้</p>
             <p className="text-xs text-slate-500 mt-1">
-              เรียก "โบ้" หรือพิมพ์ข้อความในกล่องด้านล่างเพื่อเริ่มคุยได้ทันที
+              เรียก "โนอา" หรือพิมพ์ข้อความในกล่องด้านล่างเพื่อเริ่มคุยได้ทันที
             </p>
           </div>
         ) : (
@@ -153,7 +153,7 @@ export const Conversation: React.FC = () => {
                 <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
                   {!isUser && (
                     <div className="w-8 h-8 rounded-xl bg-white border border-white/20 p-1 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
-                      <img src="/bobo.png" alt="Bo AI" className="w-full h-full object-contain" />
+                      <img src="/bobo.png" alt="Noar AI" className="w-full h-full object-contain" />
                     </div>
                   )}
 
@@ -167,7 +167,7 @@ export const Conversation: React.FC = () => {
                     <div className="flex items-center justify-between gap-4 mb-1">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-semibold tracking-wider uppercase text-slate-400">
-                          {isUser ? 'คุณ' : 'โบ้'}
+                          {isUser ? 'คุณ' : 'โนอา'}
                         </span>
                         {!isUser && msg.training_source === 'few_shot' && (
                           <span
@@ -214,10 +214,10 @@ export const Conversation: React.FC = () => {
                               ? 'text-indigo-300 font-medium'
                               : 'text-slate-400 hover:text-indigo-300'
                           }`}
-                          title="แก้ไขและบันทึกคำตอบนี้เป็นตัวอย่างการเทรน Few-Shot เพื่อให้โบ้ตอบแบบนี้ในอนาคต"
+                          title="แก้ไขและบันทึกคำตอบนี้เป็นตัวอย่างการเทรน Few-Shot เพื่อให้โนอาตอบแบบนี้ในอนาคต"
                         >
                           <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
-                          สอนโบ้ (เทรนคำตอบนี้)
+                          สอนโนอา (เทรนคำตอบนี้)
                         </button>
                       </div>
                     )}
@@ -236,7 +236,7 @@ export const Conversation: React.FC = () => {
                     <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.06]">
                       <div className="flex items-center gap-2 text-indigo-300 text-xs font-semibold">
                         <GraduationCap className="w-4 h-4 text-indigo-400" />
-                        <span>สอนโบ้ • บันทึกเป็นตัวอย่าง Few-Shot</span>
+                        <span>สอนโนอา • บันทึกเป็นตัวอย่าง Few-Shot</span>
                       </div>
                       <button
                         onClick={() => setQuickTeachMsgId(null)}
@@ -252,18 +252,18 @@ export const Conversation: React.FC = () => {
                         type="text"
                         value={teachUserQuery}
                         onChange={(e) => setTeachUserQuery(e.target.value)}
-                        placeholder="พิมพ์คำถามที่ต้องการให้โบ้จำ..."
+                        placeholder="พิมพ์คำถามที่ต้องการให้โนอาจำ..."
                         className="w-full bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50"
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] text-slate-400 font-medium">คำตอบที่ต้องการให้โบ้ตอบ (Expected Response):</label>
+                      <label className="text-[10px] text-slate-400 font-medium">คำตอบที่ต้องการให้โนอาตอบ (Expected Response):</label>
                       <textarea
                         rows={3}
                         value={teachResponse}
                         onChange={(e) => setTeachResponse(e.target.value)}
-                        placeholder="พิมพ์คำตอบที่ต้องการให้โบ้ตอบแบบเป๊ะๆ..."
+                        placeholder="พิมพ์คำตอบที่ต้องการให้โนอาตอบแบบเป๊ะๆ..."
                         className="w-full bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 resize-none"
                       />
                     </div>
@@ -377,7 +377,7 @@ export const Conversation: React.FC = () => {
                           <p className="text-[11px] text-slate-300">
                             {pending.type === 'conflict'
                               ? `ต้องการอัปเดตแทนที่ด้วย: "${pending.fact}" หรือไม่?`
-                              : `ต้องการให้โบ้จำเรื่องนี้ไว้ไหม: "${pending.fact}"?`}
+                              : `ต้องการให้โนอาจำเรื่องนี้ไว้ไหม: "${pending.fact}"?`}
                           </p>
                         )}
 
@@ -428,7 +428,7 @@ export const Conversation: React.FC = () => {
             </div>
             <div className="px-4 py-2.5 rounded-2xl bg-[#131926] border border-white/[0.08] text-xs text-indigo-300 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
-              โบ้กำลังประมวลผลคำตอบ...
+              โนอากำลังประมวลผลคำตอบ...
             </div>
           </div>
         )}
@@ -470,7 +470,7 @@ export const Conversation: React.FC = () => {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="พิมพ์ข้อความคุยกับโบ้ หรือกดไมค์เพื่อสั่งด้วยเสียง..."
+          placeholder="พิมพ์ข้อความคุยกับโนอา หรือกดไมค์เพื่อสั่งด้วยเสียง..."
           className="flex-1 bg-transparent px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none"
         />
 
