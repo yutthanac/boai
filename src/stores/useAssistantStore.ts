@@ -331,8 +331,9 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
     const savedTheme = (typeof window !== 'undefined' && localStorage.getItem('bo_theme') as 'dark' | 'light') || settings.theme || 'dark';
     get().setTheme(savedTheme);
 
-    // Configure Wake Word
+    // Configure Wake Word & Input Device
     audioService.setWakeWords(settings.wake_word, settings.alternate_names, settings.sensitivity);
+    audioService.setInputDevice(settings.input_device_id || 'default');
 
     // Register Audio & Electron Listeners once
     if (!isAudioListenersBound) {
@@ -370,7 +371,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
       audioService.onInterimSpeech((text: string) => {
         if (text) {
           set({
-            statusText: `ได้ยินว่า: "${text}"...`,
+            statusText: text.startsWith('กำลัง') ? text : `ได้ยินว่า: "${text}"...`,
           });
         } else {
           const currentSettings = db.getSettings();
@@ -383,19 +384,23 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
 
       // Electron listeners
       if (window.electronAPI) {
-        window.electronAPI.onMiniModeChanged((isMini) => {
+        window.electronAPI.onMiniModeChanged?.((isMini) => {
           set({ isMiniMode: isMini });
         });
 
-        window.electronAPI.onToggleMiniModeTrigger(() => {
+        window.electronAPI.onToggleMiniModeTrigger?.(() => {
           get().toggleMiniMode();
         });
 
-        window.electronAPI.onToggleMuteFromTray(() => {
+        window.electronAPI.onStartVoiceCommandTrigger?.(() => {
+          get().startVoiceInteraction();
+        });
+
+        window.electronAPI.onToggleMuteFromTray?.(() => {
           get().toggleMute();
         });
 
-        window.electronAPI.onMediaCommandReceived((command) => {
+        window.electronAPI.onMediaCommandReceived?.((command) => {
           if (command === 'play' || command === 'pause') {
             get().toggleMusicPlayPause();
           } else if (command === 'next') {
@@ -436,6 +441,10 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
 
     if (settings.always_listening) {
       audioService.startWakeWordDetection();
+    }
+
+    if (typeof window !== 'undefined' && window.electronAPI?.setAutoStart) {
+      window.electronAPI.setAutoStart(settings.auto_start ?? true);
     }
   },
 

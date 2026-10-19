@@ -29,6 +29,12 @@ export function setupTray(mainWindow: BrowserWindow): Tray {
         mainWindow.webContents.send('toggle-mini-mode-trigger');
       },
     },
+    {
+      label: 'สั่งการด้วยเสียงทันที (Voice Command) — Ctrl+Space',
+      click: () => {
+        mainWindow.webContents.send('start-voice-command-trigger');
+      },
+    },
     { type: 'separator' },
     {
       label: 'สถานะ: พร้อมรับฟังคำสั่ง (Always-on)',
@@ -50,6 +56,14 @@ export function setupTray(mainWindow: BrowserWindow): Tray {
   ]);
 
   tray.setContextMenu(contextMenu);
+
+  tray.on('click', () => {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  });
 
   tray.on('double-click', () => {
     if (mainWindow.isVisible()) {

@@ -1,9 +1,59 @@
 import { ipcMain, BrowserWindow, app, shell, screen, Notification } from 'electron';
+import path from 'path';
 import os from 'os';
 import https from 'https';
 import { exec } from 'child_process';
+import { URL } from 'url';
 
 let normalBounds = { width: 1180, height: 760, x: 100, y: 100 };
+
+async function sendToWhisperApi(params: {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  buffer: Buffer;
+  mimeType: string;
+  language?: string;
+}): Promise<string | null> {
+  const { endpoint, apiKey, model, buffer, mimeType, language = 'th' } = params;
+  try {
+    const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('mp4') ? 'mp4' : mimeType.includes('wav') ? 'wav' : 'ogg';
+    const fd = new FormData();
+    fd.append('file', new Blob([new Uint8Array(buffer)], { type: mimeType }), `audio.${ext}`);
+    fd.append('model', model);
+    if (language) {
+      fd.append('language', language);
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9000);
+
+    const startTime = Date.now();
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: fd,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const json: any = await res.json();
+      const elapsed = Date.now() - startTime;
+      console.log(`[Whisper STT] ${model} completed in ${elapsed}ms:`, json?.text?.slice(0, 80));
+      return json?.text ? json.text.trim() : null;
+    } else {
+      const errText = await res.text();
+      console.warn(`[Whisper STT] HTTP ${res.status}:`, errText.slice(0, 150));
+      return null;
+    }
+  } catch (err: any) {
+    console.warn('[Whisper STT] Request failed:', err?.message || err);
+    return null;
+  }
+}
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
   ipcMain.on('window-minimize', () => {
@@ -39,20 +89,24 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       }
       const primaryDisplay = screen.getPrimaryDisplay();
       const { width, height } = primaryDisplay.workAreaSize;
-      const size = 135;
-      mainWindow.setMinimumSize(120, 120);
+      const size = 150;
+      mainWindow.setMinimumSize(100, 100);
+      mainWindow.setResizable(false);
+      mainWindow.setHasShadow(false);
       mainWindow.setBounds({
         x: width - size - 24,
-        y: height - size - 24,
+        y: height - size - 40,
         width: size,
         height: size,
       });
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
       mainWindow.webContents.send('mini-mode-changed', true);
     } else {
+      mainWindow.setResizable(true);
       mainWindow.setMinimumSize(980, 640);
       mainWindow.setBounds(normalBounds);
       mainWindow.setAlwaysOnTop(false);
+      mainWindow.setHasShadow(true);
       mainWindow.webContents.send('mini-mode-changed', false);
     }
     return true;
@@ -130,10 +184,34 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
   ipcMain.handle('set-auto-start', async (_event, enable: boolean) => {
     try {
-      app.setLoginItemSettings({
-        openAtLogin: enable,
-        path: app.getPath('exe'),
-      });
+      if (process.platform === 'win32') {
+        const appPath = app.isPackaged
+          ? `"${app.getPath('exe')}"`
+          : `"${process.execPath}" "${path.resolve(__dirname, '..')}"`;
+
+        if (enable) {
+          const escapedAppPath = appPath.replace(/"/g, '\\"');
+          exec(
+            `powershell -Command "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'NoarAI' -Value '${escapedAppPath}'"`
+          );
+          app.setLoginItemSettings({
+            openAtLogin: true,
+            path: process.execPath,
+            args: app.isPackaged ? [] : [path.resolve(__dirname, '..')],
+          });
+        } else {
+          exec(
+            `powershell -Command "Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'NoarAI' -ErrorAction SilentlyContinue"`
+          );
+          app.setLoginItemSettings({
+            openAtLogin: false,
+          });
+        }
+      } else {
+        app.setLoginItemSettings({
+          openAtLogin: enable,
+        });
+      }
       return true;
     } catch (e) {
       console.error('Failed to set login item settings:', e);
@@ -246,6 +324,71 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       return { success: false, error: e?.message };
     }
   });
+
+  // Native Speech-to-Text Transcription via Groq Whisper (turbo) & OpenAI Whisper
+  ipcMain.handle(
+    'transcribe-audio',
+    async (
+      _event,
+      params: { audioBase64: string; mimeType?: string; language?: string; apiKey?: string }
+    ) => {
+      try {
+        const { audioBase64, mimeType = 'audio/webm', language = 'th', apiKey } = params || {};
+        if (!audioBase64) return { success: false, error: 'Empty audio buffer' };
+
+        const buffer = Buffer.from(audioBase64, 'base64');
+        if (buffer.length < 300) {
+          return { success: false, error: 'Audio too short' };
+        }
+
+        const groqKey =
+          (apiKey && apiKey.startsWith('gsk_') ? apiKey : null) ||
+          process.env.VITE_GROQ_API_KEY ||
+          process.env.GROQ_API_KEY ||
+          '';
+        const openaiKey =
+          (apiKey && apiKey.startsWith('sk-') ? apiKey : null) ||
+          process.env.VITE_OPENAI_API_KEY ||
+          process.env.OPENAI_API_KEY ||
+          '';
+
+        // 1. First priority: Groq Whisper (ultra fast ~250ms)
+        if (groqKey) {
+          const text = await sendToWhisperApi({
+            endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',
+            apiKey: groqKey,
+            model: 'whisper-large-v3-turbo',
+            buffer,
+            mimeType,
+            language,
+          });
+          if (text && text.trim()) {
+            return { success: true, text: text.trim() };
+          }
+        }
+
+        // 2. Fallback: OpenAI Whisper
+        if (openaiKey) {
+          const text = await sendToWhisperApi({
+            endpoint: 'https://api.openai.com/v1/audio/transcriptions',
+            apiKey: openaiKey,
+            model: 'whisper-1',
+            buffer,
+            mimeType,
+            language,
+          });
+          if (text && text.trim()) {
+            return { success: true, text: text.trim() };
+          }
+        }
+
+        return { success: false, error: 'Could not transcribe speech' };
+      } catch (e: any) {
+        console.warn('transcribe-audio error:', e);
+        return { success: false, error: e?.message || 'Transcription failed' };
+      }
+    }
+  );
 
   // Windows System Remote & Native Utility Actions
   ipcMain.handle('execute-system-action', async (_event, { action, param }: { action: string; param?: string }) => {

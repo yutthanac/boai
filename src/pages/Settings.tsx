@@ -197,6 +197,9 @@ export const Settings: React.FC = () => {
   const handleSave = () => {
     db.saveSettings(settings);
     audioService.setWakeWords(settings.wake_word, settings.alternate_names, settings.sensitivity);
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.setAutoStart) {
+      (window as any).electronAPI.setAutoStart(settings.auto_start);
+    }
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2000);
   };
@@ -1378,7 +1381,13 @@ export const Settings: React.FC = () => {
               <input
                 type="checkbox"
                 checked={settings.auto_start}
-                onChange={(e) => setSettings({ ...settings, auto_start: e.target.checked })}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setSettings({ ...settings, auto_start: val });
+                  if (typeof window !== 'undefined' && (window as any).electronAPI?.setAutoStart) {
+                    (window as any).electronAPI.setAutoStart(val);
+                  }
+                }}
                 className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
               />
             </div>

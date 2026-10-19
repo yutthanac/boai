@@ -20,7 +20,16 @@ export class AudioService {
   private currentWakeWord = 'โนอา';
   private alternateWakeWords: string[] = ['โนอา', 'น้องโนอา', 'ไอ้โนอา', 'คุณโนอา', 'โนอาห์', 'noar', 'noah', 'Hey Noar'];
   private sensitivity = 75; // 0-100
+  private selectedDeviceId = 'default';
+  private unifiedMediaStream: MediaStream | null = null;
   private preAmpStream: MediaStream | null = null;
+  private mediaRecorder: MediaRecorder | null = null;
+  private recordedAudioChunks: Blob[] = [];
+  private vadCheckInterval: any = null;
+  private isRecordingForCommand = false;
+  private isTranscribingAudio = false;
+  private silenceDetectedMs = 0;
+  private hasUserStartedTalking = false;
 
   private constructor() {
     this.initSpeechRecognition();
@@ -133,22 +142,71 @@ export class AudioService {
     return { matched: false, matchedWord: '' };
   }
 
-  // Ensures OS/Chromium enables hardware Auto-Gain Control (AGC) for whisper/soft voice boost
+  // Ensures OS/Chromium enables hardware Auto-Gain Control (AGC) for whisper/soft voice boost (from 6ffcde3)
   private async ensureMicrophonePreAmp(): Promise<void> {
     if (this.preAmpStream && this.preAmpStream.active) return;
     try {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        const targetId = this.selectedDeviceId || db.getSettings().input_device_id || 'default';
         this.preAmpStream = await navigator.mediaDevices.getUserMedia({
           audio: {
+            deviceId: targetId && targetId !== 'default' ? { exact: targetId } : undefined,
             autoGainControl: true, // Forces Windows & Chromium audio stack to boost soft / quiet input!
             echoCancellation: true,
             noiseSuppression: true,
           },
         });
+        this.unifiedMediaStream = this.preAmpStream;
       }
     } catch (_) {
       // Graceful fallback if mic is already captured
     }
+  }
+
+  public async setInputDevice(deviceId: string): Promise<void> {
+    this.selectedDeviceId = deviceId;
+    if (this.unifiedMediaStream) {
+      try {
+        this.unifiedMediaStream.getTracks().forEach(t => t.stop());
+      } catch (_) {}
+      this.unifiedMediaStream = null;
+      this.analyser = null;
+      if (this.isListeningForWakeWord || this.voiceSessionState === 'capturing_command') {
+        await this.startMicrophoneMeter(deviceId);
+      }
+    }
+  }
+
+  public async getOrCreateMediaStream(deviceId?: string): Promise<MediaStream | null> {
+    const targetId = deviceId || this.selectedDeviceId || db.getSettings().input_device_id || 'default';
+    if (this.unifiedMediaStream && this.unifiedMediaStream.active) {
+      return this.unifiedMediaStream;
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        const constraints: MediaStreamConstraints = {
+          audio: {
+            deviceId: targetId && targetId !== 'default' ? { exact: targetId } : undefined,
+            autoGainControl: true,
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        };
+        this.unifiedMediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        return this.unifiedMediaStream;
+      }
+    } catch (e) {
+      console.warn('[AudioService] Could not open specific mic stream, falling back to default:', e);
+      try {
+        this.unifiedMediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
+        });
+        return this.unifiedMediaStream;
+      } catch (err) {
+        console.warn('[AudioService] Fatal mic getUserMedia error:', err);
+      }
+    }
+    return null;
   }
 
   // Devices
@@ -192,57 +250,62 @@ export class AudioService {
     }
   }
 
+  public getWakeThreshold(): number {
+    // Dynamic trigger threshold based on RMS time-domain speech energy:
+    // Sensitivity 100 -> 5% (whisper)
+    // Sensitivity 75 -> 9% (soft voice)
+    // Sensitivity 50 -> 14% (normal)
+    // Sensitivity 0 -> 23%
+    const s = Math.max(0, Math.min(100, this.sensitivity));
+    return Math.max(5, Math.round(23 - (s * 0.18)));
+  }
+
   // Real-time Mic Level Visualizer
   public async startMicrophoneMeter(deviceId?: string): Promise<boolean> {
     try {
-      if (this.mediaStream) {
-        this.stopMicrophoneMeter();
+      if (deviceId) {
+        this.selectedDeviceId = deviceId;
+      }
+      const stream = await this.getOrCreateMediaStream(deviceId);
+      if (!stream) return false;
+
+      if (!this.audioContext || this.audioContext.state === 'closed') {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        this.audioContext = new AudioCtx();
       }
 
-      const constraints: MediaStreamConstraints = {
-        audio: deviceId && deviceId !== 'default' ? { deviceId: { exact: deviceId } } : true,
-      };
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+      }
 
-      this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      this.audioContext = new AudioCtx();
-      this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 256;
-      this.analyser.smoothingTimeConstant = 0.5;
+      if (!this.analyser) {
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 256;
+        this.analyser.smoothingTimeConstant = 0.3;
+        const source = this.audioContext.createMediaStreamSource(stream);
+        source.connect(this.analyser);
+      }
 
-      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-      source.connect(this.analyser);
-
-      const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-
+      const timeData = new Uint8Array(this.analyser.fftSize);
       const updateMeter = () => {
         if (!this.analyser) return;
-        this.analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
+        this.analyser.getByteTimeDomainData(timeData);
+        let sumSquares = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          const norm = (timeData[i] - 128) / 128;
+          sumSquares += norm * norm;
         }
-        const average = sum / dataArray.length;
-        // Scale to 0-100 based on sensitivity factor
-        const factor = (this.sensitivity / 50);
-        this.micLevel = Math.min(100, Math.round((average / 128) * 100 * factor));
+        const rms = Math.sqrt(sumSquares / timeData.length);
+        this.micLevel = Math.min(100, Math.round(rms * 280));
 
-        if (this.mediaStream?.active) {
+        if (this.unifiedMediaStream?.active || this.preAmpStream?.active) {
           requestAnimationFrame(updateMeter);
         }
       };
       requestAnimationFrame(updateMeter);
       return true;
     } catch (e) {
-      console.warn('Microphone stream access error (simulate levels for preview):', e);
-      // Simulate level fluctuation for mock / sandbox
-      const simInterval = setInterval(() => {
-        if (!this.analyser) {
-          this.micLevel = Math.floor(Math.random() * 35);
-        } else {
-          clearInterval(simInterval);
-        }
-      }, 100);
+      console.warn('Microphone meter start error:', e);
       return false;
     }
   }
@@ -252,16 +315,71 @@ export class AudioService {
   }
 
   public stopMicrophoneMeter(): void {
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(t => t.stop());
-      this.mediaStream = null;
+    if (!this.isListeningForWakeWord && this.voiceSessionState === 'idle') {
+      if (this.unifiedMediaStream) {
+        this.unifiedMediaStream.getTracks().forEach(t => t.stop());
+        this.unifiedMediaStream = null;
+      }
+      if (this.audioContext && this.audioContext.state !== 'closed') {
+        this.audioContext.close();
+        this.audioContext = null;
+      }
+      this.analyser = null;
+      this.micLevel = 0;
     }
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      this.audioContext.close();
-      this.audioContext = null;
+  }
+
+  // Helper: Encode raw Float32Array PCM samples into standard 16-bit Mono WAV Blob
+  public encodeWAV(samples: Float32Array, sampleRate: number): Blob {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i));
+      }
+    };
+
+    // RIFF chunk descriptor
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(8, 'WAVE');
+
+    // fmt sub-chunk
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
+    view.setUint16(20, 1, true); // AudioFormat (1 = PCM)
+    view.setUint16(22, 1, true); // NumChannels (1 = Mono)
+    view.setUint32(24, sampleRate, true); // SampleRate
+    view.setUint32(28, sampleRate * 2, true); // ByteRate (SampleRate * 1 * 2)
+    view.setUint16(32, 2, true); // BlockAlign (1 * 2)
+    view.setUint16(34, 16, true); // BitsPerSample (16 bits)
+
+    // data sub-chunk
+    writeString(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    // Write 16-bit PCM samples
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
     }
-    this.analyser = null;
-    this.micLevel = 0;
+
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  private async blobToBase64(blob: Blob): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const res = reader.result as string;
+        const b64 = res.split(',')[1] || '';
+        resolve(b64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
   // Wake Word & Continuous Speech Recognition
@@ -295,11 +413,7 @@ export class AudioService {
 
               const { matched, matchedWord } = this.checkWakeWordMatch(rawPhrase);
               if (matched) {
-                console.log('[Bo AI Wake Word Heard]:', rawPhrase, '| Matched:', matchedWord, `(candidate #${j})`);
-                this.commandStartResultIndex = i;
-                this.voiceSessionState = 'capturing_command';
-                this.playChime('wake');
-                this.wakeWordCallbacks.forEach(cb => cb());
+                console.log('[Bo AI Wake Word Heard via SpeechRecognition]:', rawPhrase, '| Matched:', matchedWord, `(candidate #${j})`);
 
                 // Extract any trailing command spoken in the same breath
                 const pos = rawPhrase.toLowerCase().indexOf(matchedWord.toLowerCase());
@@ -307,12 +421,23 @@ export class AudioService {
                 if (pos !== -1) {
                   trailing = rawPhrase.slice(pos + matchedWord.length).trim();
                 }
-                this.currentCapturedTranscript = trailing;
-                if (trailing) {
-                  this.interimSpeechCallbacks.forEach(cb => cb(trailing));
+
+                // If user spoke full command in the same breath (length >= 2)
+                if (trailing && trailing.length >= 2) {
+                  this.playChime('wake');
+                  this.wakeWordCallbacks.forEach(cb => cb());
+                  this.finalizeCommand(trailing);
+                  return;
                 }
 
-                this.resetSilenceTimer();
+                // User just called "โนอา":
+                // Abort SpeechRecognition so it releases the mic cleanly,
+                // then start the high-accuracy Whisper conversation engine!
+                try {
+                  this.recognition.abort();
+                } catch (_) {}
+
+                this.startManualVoiceCommand();
                 return;
               }
             }
@@ -436,20 +561,25 @@ export class AudioService {
   }
 
   public async startWakeWordDetection() {
-    if (this.isListeningForWakeWord && this.recognition) {
-      if (this.voiceSessionState === 'capturing_command' || this.voiceSessionState === 'speaking') {
-        return;
-      }
+    if (this.isListeningForWakeWord && (this.voiceSessionState === 'capturing_command' || this.voiceSessionState === 'speaking')) {
+      return;
     }
     this.isListeningForWakeWord = true;
     if (this.voiceSessionState !== 'capturing_command' && this.voiceSessionState !== 'speaking') {
       this.voiceSessionState = 'listening_wake';
     }
+
     await this.ensureMicrophonePreAmp();
+
     if (this.recognition) {
       try {
         this.recognition.start();
-      } catch (_) {}
+        console.log('[AudioService] Web Speech wake detector started.');
+      } catch (err: any) {
+        if (err.name !== 'InvalidStateError') {
+          console.warn('[AudioService] recognition.start warning:', err);
+        }
+      }
     }
   }
 
@@ -458,10 +588,22 @@ export class AudioService {
     this.voiceSessionState = 'idle';
     if (this.commandSilenceTimer) clearTimeout(this.commandSilenceTimer);
     if (this.commandMaxTimer) clearTimeout(this.commandMaxTimer);
+    if (this.vadCheckInterval) {
+      clearInterval(this.vadCheckInterval);
+      this.vadCheckInterval = null;
+    }
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      try {
+        this.mediaRecorder.stop();
+      } catch (_) {}
+    }
+    this.isRecordingForCommand = false;
     if (this.preAmpStream) {
       this.preAmpStream.getTracks().forEach(t => t.stop());
       this.preAmpStream = null;
     }
+    this.unifiedMediaStream = null;
+    this.stopMicrophoneMeter();
     if (this.recognition) {
       try {
         this.recognition.stop();
@@ -490,25 +632,283 @@ export class AudioService {
     };
   }
 
-  // Trigger manual listening from microphone button
-  public startManualVoiceCommand() {
+  // Start high-fidelity audio recorder with Voice Activity Detection (VAD)
+  public async startAudioRecording(): Promise<boolean> {
+    try {
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        try {
+          this.mediaRecorder.stop();
+        } catch (_) {}
+      }
+
+      const stream = await this.getOrCreateMediaStream();
+      if (!stream) {
+        console.warn('[AudioService] No active stream for startAudioRecording');
+        return false;
+      }
+
+      let mimeType = 'audio/webm;codecs=opus';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = MediaRecorder.isTypeSupported('audio/webm')
+            ? 'audio/webm'
+            : MediaRecorder.isTypeSupported('audio/mp4')
+            ? 'audio/mp4'
+            : '';
+        }
+      }
+
+      this.recordedAudioChunks = [];
+      this.mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      this.mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          this.recordedAudioChunks.push(e.data);
+        }
+      };
+
+      this.mediaRecorder.start(100);
+      this.isRecordingForCommand = true;
+      this.hasUserStartedTalking = false;
+      this.silenceDetectedMs = 0;
+
+      this.startVadSilenceDetection();
+      return true;
+    } catch (err) {
+      console.warn('[AudioService] Failed to start MediaRecorder:', err);
+      return false;
+    }
+  }
+
+  private startVadSilenceDetection() {
+    if (this.vadCheckInterval) clearInterval(this.vadCheckInterval);
+
+    let checkCount = 0;
+    const speechThreshold = Math.max(5, this.getWakeThreshold() - 2);
+
+    this.vadCheckInterval = setInterval(() => {
+      if (!this.isRecordingForCommand) {
+        clearInterval(this.vadCheckInterval);
+        return;
+      }
+
+      checkCount++;
+      const currentLevel = this.getMicrophoneLevel();
+
+      // If user voice energy exceeds speech threshold
+      if (currentLevel >= speechThreshold) {
+        if (!this.hasUserStartedTalking) {
+          this.hasUserStartedTalking = true;
+          this.interimSpeechCallbacks.forEach(cb => cb('กำลังรับฟังคำสั่งของคุณ...'));
+        }
+        this.silenceDetectedMs = 0;
+      } else if (this.hasUserStartedTalking) {
+        // User has already started talking, now measuring pause/silence
+        this.silenceDetectedMs += 100;
+        // After user spoke, 1.2 seconds of pause -> automatically finalize and transcribe!
+        if (this.silenceDetectedMs >= 1200) {
+          console.log('[AudioService] Silence pause detected (1.2s), stopping recording to transcribe.');
+          this.stopRecordingAndTranscribe();
+          return;
+        }
+      }
+
+      // If user hasn't spoken at all after 7 seconds, revert to wake listening
+      if (!this.hasUserStartedTalking && checkCount >= 70) {
+        console.log('[AudioService] No speech detected in 7s, aborting command capture.');
+        this.abortCommandRecording();
+        return;
+      }
+
+      // Safety timeout (12 seconds max)
+      if (checkCount >= 120) {
+        console.log('[AudioService] Max duration reached (12s), stopping recording to transcribe.');
+        this.stopRecordingAndTranscribe();
+      }
+    }, 100);
+  }
+
+  private abortCommandRecording() {
+    if (this.vadCheckInterval) {
+      clearInterval(this.vadCheckInterval);
+      this.vadCheckInterval = null;
+    }
+    this.isRecordingForCommand = false;
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      try {
+        this.mediaRecorder.stop();
+      } catch (_) {}
+    }
+    this.recordedAudioChunks = [];
+    this.voiceSessionState = this.isListeningForWakeWord ? 'listening_wake' : 'idle';
+    this.interimSpeechCallbacks.forEach(cb => cb(''));
+  }
+
+  public async stopRecordingAndTranscribe(): Promise<void> {
+    if (this.vadCheckInterval) {
+      clearInterval(this.vadCheckInterval);
+      this.vadCheckInterval = null;
+    }
+
+    if (!this.isRecordingForCommand || !this.mediaRecorder) {
+      return;
+    }
+
+    this.isRecordingForCommand = false;
+
+    return new Promise((resolve) => {
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.onstop = async () => {
+          await this.processRecordedAudio();
+          resolve();
+        };
+        try {
+          this.mediaRecorder.stop();
+        } catch (_) {
+          resolve();
+        }
+      } else {
+        resolve();
+      }
+    });
+  }
+
+  private async processRecordedAudio(): Promise<void> {
+    if (this.recordedAudioChunks.length === 0) {
+      this.voiceSessionState = this.isListeningForWakeWord ? 'listening_wake' : 'idle';
+      this.interimSpeechCallbacks.forEach(cb => cb(''));
+      return;
+    }
+
+    const mimeType = this.mediaRecorder?.mimeType || 'audio/webm';
+    const audioBlob = new Blob(this.recordedAudioChunks, { type: mimeType });
+    this.recordedAudioChunks = [];
+
+    // Ignore tiny audio click if user didn't speak
+    if (audioBlob.size < 600 && !this.hasUserStartedTalking) {
+      this.voiceSessionState = this.isListeningForWakeWord ? 'listening_wake' : 'idle';
+      this.interimSpeechCallbacks.forEach(cb => cb(''));
+      return;
+    }
+
+    this.isTranscribingAudio = true;
+    this.interimSpeechCallbacks.forEach(cb => cb('กำลังถอดเสียงคำสั่ง...'));
+
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const res = reader.result as string;
+          const base64 = res.split(',')[1] || '';
+          resolve(base64);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(audioBlob);
+      const audioBase64 = await base64Promise;
+
+      if (!audioBase64) {
+        throw new Error('Empty audio base64');
+      }
+
+      let transcribedText = '';
+
+      // 1. Electron IPC Whisper Transcription (Groq Whisper-large-v3-turbo / OpenAI Whisper)
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.transcribeAudio) {
+        const settings = db.getSettings();
+        const ipcRes = await (window as any).electronAPI.transcribeAudio({
+          audioBase64,
+          mimeType,
+          language: 'th',
+          apiKey: settings.meta_api_key || '',
+        });
+        if (ipcRes?.success && ipcRes?.text) {
+          transcribedText = ipcRes.text;
+        }
+      }
+
+      // 2. Direct web fallback if outside electron
+      if (!transcribedText) {
+        try {
+          const settings = db.getSettings();
+          const groqKey =
+            settings.meta_api_key ||
+            (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GROQ_API_KEY) ||
+            '';
+          const formData = new FormData();
+          formData.append('file', audioBlob, 'audio.webm');
+          formData.append('model', 'whisper-large-v3-turbo');
+          formData.append('language', 'th');
+
+          const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${groqKey}`,
+            },
+            body: formData,
+          });
+          if (resp.ok) {
+            const json = await resp.json();
+            transcribedText = json.text || '';
+          }
+        } catch (fetchErr) {
+          console.warn('[AudioService] Direct fetch whisper error:', fetchErr);
+        }
+      }
+
+      let cleanCommand = (transcribedText || '').trim();
+
+      if (cleanCommand) {
+        console.log('[AudioService] Whisper Transcribed Speech:', cleanCommand);
+
+        // Strip wake word prefixes if user said "โนอา เปิดเพลงหน่อย"
+        const wordsToMatch = [this.currentWakeWord, ...this.alternateWakeWords]
+          .filter(Boolean)
+          .sort((a, b) => b.length - a.length);
+        for (const w of wordsToMatch) {
+          const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`^${escaped}\\s*[,.:;]?\\s*`, 'i');
+          cleanCommand = cleanCommand.replace(regex, '').trim();
+        }
+
+        if (cleanCommand.length >= 1) {
+          this.interimSpeechCallbacks.forEach(cb => cb(cleanCommand));
+          this.finalizeCommand(cleanCommand);
+          return;
+        }
+      }
+
+      this.voiceSessionState = this.isListeningForWakeWord ? 'listening_wake' : 'idle';
+      this.interimSpeechCallbacks.forEach(cb => cb(''));
+    } catch (e) {
+      console.warn('[AudioService] Transcription process error:', e);
+      this.voiceSessionState = this.isListeningForWakeWord ? 'listening_wake' : 'idle';
+      this.interimSpeechCallbacks.forEach(cb => cb(''));
+    } finally {
+      this.isTranscribingAudio = false;
+    }
+  }
+
+  // Trigger manual listening from microphone button, hotkey, OR wake word
+  public async startManualVoiceCommand() {
     this.playChime('wake');
     this.voiceSessionState = 'capturing_command';
     this.currentCapturedTranscript = '';
     this.commandStartResultIndex = 0;
+
+    // Abort speech recognition so it releases the microphone completely for MediaRecorder
     if (this.recognition) {
       try {
         this.recognition.abort();
       } catch (_) {}
-      setTimeout(() => {
-        try {
-          if (this.voiceSessionState === 'capturing_command') {
-            this.recognition.start();
-          }
-        } catch (_) {}
-      }, 100);
     }
-    this.resetSilenceTimer();
+
+    await this.startMicrophoneMeter();
+    await this.startAudioRecording();
+
+    this.interimSpeechCallbacks.forEach(cb => cb('กำลังรับฟังคำสั่งของคุณ...'));
   }
 
   public setSpeakingState(speaking: boolean) {
@@ -516,6 +916,17 @@ export class AudioService {
       this.voiceSessionState = 'speaking';
       if (this.commandSilenceTimer) clearTimeout(this.commandSilenceTimer);
       if (this.commandMaxTimer) clearTimeout(this.commandMaxTimer);
+      if (this.vadCheckInterval) {
+        clearInterval(this.vadCheckInterval);
+        this.vadCheckInterval = null;
+      }
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        try {
+          this.mediaRecorder.stop();
+        } catch (_) {}
+      }
+      this.isRecordingForCommand = false;
+
       // Abort mic recognition while Bo is speaking so it doesn't transcribe its own voice
       if (this.recognition) {
         try {
@@ -523,17 +934,22 @@ export class AudioService {
         } catch (_) {}
       }
     } else {
-      this.voiceSessionState = 'listening_wake';
+      this.voiceSessionState = this.isListeningForWakeWord ? 'listening_wake' : 'idle';
       this.currentCapturedTranscript = '';
       this.commandStartResultIndex = 0;
-      if (this.isListeningForWakeWord && this.recognition) {
-        setTimeout(() => {
-          try {
-            if (this.isListeningForWakeWord && this.voiceSessionState === 'listening_wake') {
-              this.recognition.start();
-            }
-          } catch (_) {}
-        }, 150);
+      if (this.isListeningForWakeWord) {
+        this.ensureMicrophonePreAmp().then(() => {
+          if (this.recognition) {
+            setTimeout(() => {
+              try {
+                if (this.isListeningForWakeWord && this.voiceSessionState === 'listening_wake') {
+                  this.recognition.start();
+                  console.log('[AudioService] Resumed wake word recognition after speaking.');
+                }
+              } catch (_) {}
+            }, 200);
+          }
+        });
       }
     }
   }

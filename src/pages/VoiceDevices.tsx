@@ -22,10 +22,12 @@ import { useAssistantStore } from '../stores/useAssistantStore';
 const LiveMicMeter: React.FC<{ sensitivity: number; isTestingMic: boolean }> = React.memo(
   ({ sensitivity, isTestingMic }) => {
     const micLevel = useAudioStore((s) => s.micLevel);
+    const triggerThreshold = audioService.getWakeThreshold();
     return (
       <AudioLevelMeter
         level={micLevel}
-        threshold={sensitivity}
+        threshold={triggerThreshold}
+        sensitivity={sensitivity}
         isTesting={isTestingMic}
       />
     );

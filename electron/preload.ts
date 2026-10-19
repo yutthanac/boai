@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMediaCommandReceived: (callback: (command: string) => void) => {
     ipcRenderer.on('media-command-received', (_event, command) => callback(command));
   },
+  transcribeAudio: (params: { audioBase64: string; mimeType?: string; language?: string; apiKey?: string }) =>
+    ipcRenderer.invoke('transcribe-audio', params),
+  onStartVoiceCommandTrigger: (callback: () => void) => {
+    ipcRenderer.on('start-voice-command-trigger', () => callback());
+  },
   sendLineMessage: (params: { token: string; to?: string; message: string; broadcastIfNoTo?: boolean }) =>
     ipcRenderer.invoke('send-line-message', params),
   getLineWebhookInfo: () => ipcRenderer.invoke('get-line-webhook-info'),

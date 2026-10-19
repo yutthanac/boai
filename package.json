@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc && vite build && npm run build:electron",
     "build:electron": "tsc electron/main.ts electron/ipc-handlers.ts electron/preload.ts electron/tray.ts electron/line-webhook.ts electron/local-server.ts --outDir dist-electron --module commonjs --target es2020 --esModuleInterop --skipLibCheck",
+    "pack:asar": "node scripts/pack-asar.cjs",
     "preview": "vite preview",
     "electron:dev": "npm run build:electron && concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder",

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAssistantStore } from '../stores/useAssistantStore';
+import { audioService } from '../services/audio/audioService';
 import { Maximize2, Mic, Volume2, VolumeX } from 'lucide-react';
 
 export const FloatingOrbWidget: React.FC = () => {
@@ -10,6 +11,17 @@ export const FloatingOrbWidget: React.FC = () => {
   const startVoiceInteraction = useAssistantStore((s) => s.startVoiceInteraction);
   const toggleMute = useAssistantStore((s) => s.toggleMute);
   const [isHovered, setIsHovered] = useState(false);
+
+  const handleOrbClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (state === 'speaking') {
+      useAssistantStore.getState().interruptSpeaking();
+    } else if (state === 'listening') {
+      audioService.stopRecordingAndTranscribe();
+    } else {
+      startVoiceInteraction();
+    }
+  };
 
   // Dynamic glow & color theme based on assistant state
   const getOrbTheme = () => {
@@ -56,15 +68,19 @@ export const FloatingOrbWidget: React.FC = () => {
 
   return (
     <div
-      className="w-full h-full flex flex-col items-center justify-center relative select-none p-2 bg-transparent overflow-hidden"
+      className="w-full h-full flex flex-col items-center justify-center relative select-none p-1 bg-transparent overflow-hidden"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Draggable Aura & Orb Container */}
       <div
-        className="relative flex items-center justify-center cursor-move window-drag-region"
-        title="ลากเพื่อย้ายตำแหน่ง / ดับเบิลคลิกเพื่อเปิดหน้าต่างหลัก"
-        onDoubleClick={toggleMiniMode}
+        className="relative flex items-center justify-center cursor-pointer window-drag-region"
+        title="คลิกเพื่อสั่งการด้วยเสียง / ดับเบิลคลิกเพื่อเปิดหน้าต่างหลัก / ลากเพื่อย้าย"
+        onClick={handleOrbClick}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          toggleMiniMode();
+        }}
       >
         {/* Ambient Outer Halo */}
         <div
@@ -113,10 +129,19 @@ export const FloatingOrbWidget: React.FC = () => {
         }`}
       >
         <button
-          onClick={startVoiceInteraction}
-          title={state === 'speaking' ? 'ขัดจังหวะโนอา (พูดขัดได้เลยค่ะ)' : 'เริ่มพูดสั่งการ'}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (state === 'listening') {
+              audioService.stopRecordingAndTranscribe();
+            } else {
+              startVoiceInteraction();
+            }
+          }}
+          title={state === 'speaking' ? 'ขัดจังหวะโนอา' : state === 'listening' ? 'หยุดพูดและส่งคำสั่ง' : 'เริ่มพูดสั่งการ'}
           className={`p-1 rounded-full transition-colors ${
-            state === 'speaking'
+            state === 'listening'
+              ? 'text-cyan-300 bg-cyan-500/20 animate-pulse'
+              : state === 'speaking'
               ? 'text-amber-400 bg-amber-500/20 animate-pulse'
               : 'text-slate-300 hover:text-cyan-400 hover:bg-cyan-500/10'
           }`}
@@ -125,7 +150,10 @@ export const FloatingOrbWidget: React.FC = () => {
         </button>
 
         <button
-          onClick={toggleMute}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleMute();
+          }}
           title={isMuted ? 'เปิดเสียง' : 'ปิดเสียง'}
           className={`p-1 rounded-full transition-colors ${
             isMuted
@@ -137,7 +165,10 @@ export const FloatingOrbWidget: React.FC = () => {
         </button>
 
         <button
-          onClick={toggleMiniMode}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleMiniMode();
+          }}
           title="ขยายเป็นหน้าต่างหลัก (Ctrl+Shift+B)"
           className="p-1 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
         >
@@ -145,8 +176,8 @@ export const FloatingOrbWidget: React.FC = () => {
         </button>
       </div>
 
-      {/* Mini State Caption */}
-      <div className="absolute top-1 px-1.5 py-0.5 rounded-full bg-black/50 text-[9px] font-medium text-slate-300 pointer-events-none truncate max-w-[110px]">
+      {/* Mini State Caption Pill */}
+      <div className="absolute top-1 px-2.5 py-0.5 rounded-full bg-[#07090E]/85 backdrop-blur-md border border-white/10 text-[9px] font-medium text-cyan-200 pointer-events-none truncate max-w-[120px] shadow-sm">
         {theme.label}
       </div>
     </div>

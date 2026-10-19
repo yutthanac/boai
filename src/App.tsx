@@ -133,7 +133,11 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className={`flex flex-col h-screen w-screen bg-[#121212] text-slate-100 overflow-hidden select-none font-sans transition-colors duration-200 ${theme === 'light' ? 'theme-light light' : 'theme-dark dark'}`}>
+    <div
+      className={`flex flex-col h-screen w-screen rounded-2xl border border-white/10 shadow-2xl bg-[#121212] text-slate-100 overflow-hidden select-none font-sans transition-all duration-200 ${
+        theme === 'light' ? 'theme-light light bg-[#f1f5f9] text-slate-900 border-black/10' : 'theme-dark dark'
+      }`}
+    >
       {/* Window Title Bar */}
       <WindowFrame />
 

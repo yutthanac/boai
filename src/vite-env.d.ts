@@ -35,10 +35,15 @@ interface Window {
     fetchGrokTts?: (params: { text: string; apiKey: string; voice: string }) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
     executeSystemAction?: (action: string, param?: string) => Promise<{ success: boolean; message: string }>;
     onWakeWordTriggered: (callback: () => void) => void;
-    onMiniModeChanged: (callback: (isMini: boolean) => void) => void;
-    onToggleMiniModeTrigger: (callback: () => void) => void;
-    onToggleMuteFromTray: (callback: () => void) => void;
-    onMediaCommandReceived: (callback: (command: string) => void) => void;
+    onMiniModeChanged?: (callback: (isMini: boolean) => void) => void;
+    onToggleMiniModeTrigger?: (callback: () => void) => void;
+    onToggleMuteFromTray?: (callback: () => void) => void;
+    onMediaCommandReceived?: (callback: (command: string) => void) => void;
+    transcribeAudio?: (params: { audioBase64: string; mimeType?: string; language?: string; apiKey?: string }) => Promise<{ success: boolean; text?: string; error?: string }>;
+    onStartVoiceCommandTrigger?: (callback: () => void) => void;
+    sendLineMessage?: (params: { token: string; to?: string; message: string; broadcastIfNoTo?: boolean }) => Promise<any>;
+    getLineWebhookInfo?: () => Promise<any>;
+    onLineUserConnected?: (callback: (data: { userId: string; event: any; timestamp: string }) => void) => void;
   };
 }
 

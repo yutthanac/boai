@@ -44,6 +44,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       selectedOutputId: settings.output_device_id || 'default',
       sensitivity: settings.sensitivity || 85,
     });
+    audioService.setInputDevice(settings.input_device_id || 'default');
   },
 
   setSelectedInput: (id: string) => {
@@ -51,6 +52,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const settings = db.getSettings();
     settings.input_device_id = id;
     db.saveSettings(settings);
+    audioService.setInputDevice(id);
   },
 
   setSelectedOutput: (id: string) => {

@@ -3,18 +3,21 @@ import React from 'react';
 interface AudioLevelMeterProps {
   level: number; // 0 to 100
   threshold?: number; // Wake word threshold (0-100)
+  sensitivity?: number;
   label?: string;
   isTesting?: boolean;
 }
 
 export const AudioLevelMeter: React.FC<AudioLevelMeterProps> = React.memo(({
   level,
-  threshold = 75,
+  threshold = 15,
+  sensitivity,
   label = 'ระดับเสียงไมค์สด (Microphone Level)',
   isTesting = false,
 }) => {
   // Normalize level
   const clamped = Math.max(0, Math.min(100, level));
+  const isTriggered = clamped >= threshold;
 
   const getMeterColor = (val: number) => {
     if (val > 85) return 'bg-rose-500';
@@ -29,17 +32,17 @@ export const AudioLevelMeter: React.FC<AudioLevelMeterProps> = React.memo(({
         <span className="text-slate-300 font-medium">{label}</span>
         <div className="flex items-center gap-2">
           {isTesting && (
-            <span className="flex items-center gap-1 text-[11px] text-cyan-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-              กำลังวัดสัญญาณ
+            <span className={`flex items-center gap-1 text-[11px] font-medium transition-colors ${isTriggered ? 'text-emerald-400' : 'text-cyan-400'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isTriggered ? 'bg-emerald-400 animate-ping' : 'bg-cyan-400 animate-pulse'}`} />
+              {isTriggered ? 'ตรวจพบเสียงพูด (Voice Active)' : 'กำลังรับสัญญาณ'}
             </span>
           )}
-          <span className="font-mono text-slate-400">{clamped}%</span>
+          <span className="font-mono text-slate-300 font-semibold">{clamped}%</span>
         </div>
       </div>
 
       {/* Meter Bar Container */}
-      <div className="relative h-3 w-full bg-slate-900/90 rounded-full border border-white/10 overflow-hidden p-0.5">
+      <div className="relative h-3.5 w-full bg-slate-900/90 rounded-full border border-white/10 overflow-hidden p-0.5">
         {/* Dynamic Level Fill */}
         <div
           className={`h-full rounded-full transition-all duration-75 ${getMeterColor(clamped)} shadow-[0_0_12px_rgba(0,240,255,0.4)]`}
@@ -47,18 +50,18 @@ export const AudioLevelMeter: React.FC<AudioLevelMeterProps> = React.memo(({
         />
 
         {/* Wake Word Threshold Marker */}
-        {threshold && (
+        {threshold !== undefined && (
           <div
-            className="absolute top-0 bottom-0 w-0.5 bg-rose-400 z-10 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
+            className="absolute top-0 bottom-0 w-1 bg-rose-400 z-10 shadow-[0_0_8px_rgba(244,63,94,0.9)]"
             style={{ left: `${threshold}%` }}
-            title={`เกณฑ์ตรวจจับ Wake Word: ${threshold}%`}
+            title={`เกณฑ์ตรวจจับเสียงเรียก: ${threshold}%`}
           />
         )}
       </div>
 
-      <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+      <div className="flex justify-between text-[10px] text-slate-400 font-mono">
         <span>-60 dB (เงียบ)</span>
-        <span>เกณฑ์คำเรียก: {threshold}%</span>
+        <span className="text-rose-400 font-medium">เกณฑ์ตรวจจับ: {threshold}% {sensitivity !== undefined ? `(ความไว ${sensitivity}%)` : ''}</span>
         <span>0 dB (ดังสุด)</span>
       </div>
     </div>
