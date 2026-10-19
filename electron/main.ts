@@ -3,6 +3,7 @@ import path from 'path';
 import { setupIpcHandlers } from './ipc-handlers';
 import { setupTray } from './tray';
 import { lineWebhookServer } from './line-webhook';
+import { startLocalServer, stopLocalServer } from './local-server';
 
 // Enable background audio and video autoplay without user gesture requirement
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -32,13 +33,17 @@ function createWindow() {
   setupIpcHandlers(mainWindow);
   setupTray(mainWindow);
 
-  // Auto-grant media (microphone) permission so SpeechRecognition and Web Audio work seamlessly on refresh
+  // Auto-grant media (microphone) permission so SpeechRecognition and Web Audio work seamlessly
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {
     if (permission === 'media') {
       callback(true);
       return;
     }
     callback(true);
+  });
+
+  mainWindow.webContents.session.setPermissionCheckHandler((_webContents, permission) => {
+    return true;
   });
 
   // Initialize and start LINE Webhook Server
@@ -52,7 +57,16 @@ function createWindow() {
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // In production, serve via local http://127.0.0.1 server to enable Chromium SpeechRecognition and Secure Context
+    const distPath = path.join(__dirname, '../dist');
+    startLocalServer(distPath)
+      .then((port) => {
+        mainWindow?.loadURL(`http://127.0.0.1:${port}`);
+      })
+      .catch((err) => {
+        console.warn('[Noar] Failed to start local server, fallback to loadFile:', err);
+        mainWindow?.loadFile(path.join(distPath, 'index.html'));
+      });
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -99,6 +113,7 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  stopLocalServer();
   globalShortcut.unregisterAll();
 });
 
