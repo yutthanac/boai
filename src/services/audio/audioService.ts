@@ -62,11 +62,15 @@ export class AudioService {
 
     // Restart recognizer if already listening so new words take effect immediately
     if (this.isListeningForWakeWord && this.recognition) {
+      // Guard: Never abort speech recognition if user is actively in the middle of a command or assistant is speaking
+      if (this.voiceSessionState === 'capturing_command' || this.voiceSessionState === 'speaking') {
+        return;
+      }
       try {
         this.recognition.abort();
       } catch (_) {}
       setTimeout(() => {
-        if (this.isListeningForWakeWord) {
+        if (this.isListeningForWakeWord && this.voiceSessionState !== 'capturing_command' && this.voiceSessionState !== 'speaking') {
           try {
             this.recognition.start();
           } catch (_) {}
@@ -432,8 +436,15 @@ export class AudioService {
   }
 
   public async startWakeWordDetection() {
+    if (this.isListeningForWakeWord && this.recognition) {
+      if (this.voiceSessionState === 'capturing_command' || this.voiceSessionState === 'speaking') {
+        return;
+      }
+    }
     this.isListeningForWakeWord = true;
-    this.voiceSessionState = 'listening_wake';
+    if (this.voiceSessionState !== 'capturing_command' && this.voiceSessionState !== 'speaking') {
+      this.voiceSessionState = 'listening_wake';
+    }
     await this.ensureMicrophonePreAmp();
     if (this.recognition) {
       try {

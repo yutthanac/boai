@@ -32,6 +32,15 @@ function createWindow() {
   setupIpcHandlers(mainWindow);
   setupTray(mainWindow);
 
+  // Auto-grant media (microphone) permission so SpeechRecognition and Web Audio work seamlessly on refresh
+  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true);
+      return;
+    }
+    callback(true);
+  });
+
   // Initialize and start LINE Webhook Server
   lineWebhookServer.setMainWindow(mainWindow);
   lineWebhookServer.start().catch((err) => {

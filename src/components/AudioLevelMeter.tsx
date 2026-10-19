@@ -7,7 +7,7 @@ interface AudioLevelMeterProps {
   isTesting?: boolean;
 }
 
-export const AudioLevelMeter: React.FC<AudioLevelMeterProps> = ({
+export const AudioLevelMeter: React.FC<AudioLevelMeterProps> = React.memo(({
   level,
   threshold = 75,
   label = 'ระดับเสียงไมค์สด (Microphone Level)',
@@ -63,4 +63,4 @@ export const AudioLevelMeter: React.FC<AudioLevelMeterProps> = ({
       </div>
     </div>
   );
-};
+});

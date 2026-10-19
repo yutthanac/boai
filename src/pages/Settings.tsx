@@ -37,7 +37,9 @@ import { lineService } from '../services/line/lineService';
 import { useAssistantStore } from '../stores/useAssistantStore';
 
 export const Settings: React.FC = () => {
-  const { theme, setTheme, grokQuota } = useAssistantStore();
+  const theme = useAssistantStore((s) => s.theme);
+  const setTheme = useAssistantStore((s) => s.setTheme);
+  const grokQuota = useAssistantStore((s) => s.grokQuota);
   const [settings, setSettings] = useState<AppSettings>(db.getSettings());
   const [showKey, setShowKey] = useState<{ [k: string]: boolean }>({});
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -767,11 +769,8 @@ export const Settings: React.FC = () => {
                       : 'bg-surface-elevated/70 border-white/[0.04] text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <div className="flex items-center gap-1">
-                    <p className="text-xs font-semibold">เสียงธรรมชาติ</p>
-                    <span className="px-1 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 font-bold">ฟรี</span>
-                  </div>
-                  <p className="text-[10px] text-cyan-300 mt-0.5">คมชัด ลื่นไหล ไม่เสียเงิน</p>
+                  <p className="text-xs font-semibold">เสียงธรรมชาติ</p>
+                  <p className="text-[10px] text-cyan-300 mt-0.5">คมชัด ลื่นไหล (ฟรี)</p>
                 </button>
                 <button
                   type="button"

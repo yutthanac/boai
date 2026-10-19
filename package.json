@@ -9,7 +9,7 @@
     "build": "tsc && vite build && npm run build:electron",
     "build:electron": "tsc electron/main.ts electron/ipc-handlers.ts electron/preload.ts electron/tray.ts electron/line-webhook.ts --outDir dist-electron --module commonjs --target es2020 --esModuleInterop --skipLibCheck",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "electron:dev": "npm run build:electron && concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder",
     "webhook": "node scripts/line-webhook.js"
   },
@@ -37,10 +37,41 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^10.0.6",
     "electron": "^33.2.1",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
-    "vite": "^6.0.1"
+    "vite": "^6.0.1",
+    "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "com.noar.assistant",
+    "productName": "NOAR AI Assistant",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "public/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NOAR AI Assistant"
+    }
   }
 }

@@ -22,14 +22,12 @@ import { audioService } from '../services/audio/audioService';
 import { db } from '../services/db/databaseService';
 
 export const Conversation: React.FC = () => {
-  const {
-    messages,
-    sendMessage,
-    clearConversation,
-    state,
-    startVoiceInteraction,
-    resolvePendingMemory,
-  } = useAssistantStore();
+  const messages = useAssistantStore((s) => s.messages);
+  const sendMessage = useAssistantStore((s) => s.sendMessage);
+  const clearConversation = useAssistantStore((s) => s.clearConversation);
+  const state = useAssistantStore((s) => s.state);
+  const startVoiceInteraction = useAssistantStore((s) => s.startVoiceInteraction);
+  const resolvePendingMemory = useAssistantStore((s) => s.resolvePendingMemory);
 
   const [input, setInput] = useState('');
   const [editingPendingFact, setEditingPendingFact] = useState<string | null>(null);
@@ -456,10 +454,12 @@ export const Conversation: React.FC = () => {
         <button
           type="button"
           onClick={startVoiceInteraction}
-          title="กดเพื่อสั่งการด้วยเสียง"
+          title={state === 'speaking' ? 'กดเพื่อขัดจังหวะโนอา (พูดขัดได้เลยค่ะ)' : 'กดเพื่อสั่งการด้วยเสียง'}
           className={`p-3 rounded-xl transition-all duration-200 shrink-0 ${
             state === 'listening'
               ? 'bg-cyan-500 text-white shadow-[0_0_15px_rgba(0,240,255,0.6)] animate-pulse'
+              : state === 'speaking'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
               : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
           }`}
         >

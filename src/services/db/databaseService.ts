@@ -13,8 +13,10 @@ import {
   DeleteReminderResult,
   CompleteReminderResult,
   StorageUsageInfo,
-  StorageCategoryBreakdown
+  StorageCategoryBreakdown,
+  PlaylistItem
 } from '../../types';
+import { DEFAULT_MUSIC_PLAYLIST } from '../music/musicService';
 
 const STORAGE_KEYS = {
   SETTINGS: 'boai_settings',
@@ -27,6 +29,7 @@ const STORAGE_KEYS = {
   REMINDERS: 'boai_reminders',
   AUDIT_LOGS: 'boai_memory_audit_logs',
   LINE_USER_ID: 'boai_line_user_id',
+  PLAYLIST: 'boai_music_playlist',
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -297,6 +300,15 @@ const DEFAULT_REMINDERS: ReminderItem[] = [
 export class DatabaseService {
   private static instance: DatabaseService;
 
+  // Ultra-fast in-memory cache layer to prevent synchronous localStorage IO bottleneck
+  private _cachedSettings: AppSettings | null = null;
+  private _cachedPersonality: PersonalityConfig | null = null;
+  private _cachedMemories: MemoryItem[] | null = null;
+  private _cachedKnowledge: KnowledgeItem[] | null = null;
+  private _cachedExamples: ExampleTrainingItem[] | null = null;
+  private _cachedReminders: ReminderItem[] | null = null;
+  private _cachedPlaylist: PlaylistItem[] | null = null;
+
   private constructor() {
     this.initDefaults();
   }
@@ -412,6 +424,7 @@ export class DatabaseService {
 
   // Settings
   public getSettings(): AppSettings {
+    if (this._cachedSettings) return this._cachedSettings;
     const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (!raw) return DEFAULT_SETTINGS;
     try {
@@ -428,37 +441,49 @@ export class DatabaseService {
           parsed.alternate_names = ['น้องโนอา', 'ไอ้โนอา', 'Noar'];
         }
       }
-      return { ...DEFAULT_SETTINGS, ...parsed };
+      const merged: AppSettings = { ...DEFAULT_SETTINGS, ...parsed };
+      this._cachedSettings = merged;
+      return merged;
     } catch {
+      this._cachedSettings = DEFAULT_SETTINGS;
       return DEFAULT_SETTINGS;
     }
   }
 
   public saveSettings(settings: AppSettings): void {
+    this._cachedSettings = settings;
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }
 
   // Personality
   public getPersonality(): PersonalityConfig {
+    if (this._cachedPersonality) return this._cachedPersonality;
     const raw = localStorage.getItem(STORAGE_KEYS.PERSONALITY);
-    return raw ? { ...DEFAULT_PERSONALITY, ...JSON.parse(raw) } : DEFAULT_PERSONALITY;
+    const parsed: PersonalityConfig = raw ? { ...DEFAULT_PERSONALITY, ...JSON.parse(raw) } : DEFAULT_PERSONALITY;
+    this._cachedPersonality = parsed;
+    return parsed;
   }
 
   public savePersonality(personality: PersonalityConfig): void {
+    this._cachedPersonality = personality;
     localStorage.setItem(STORAGE_KEYS.PERSONALITY, JSON.stringify(personality));
   }
 
   // Memories
   public getMemories(includeArchived = false): MemoryItem[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.MEMORIES);
-    const list: MemoryItem[] = raw ? JSON.parse(raw) : [];
-    if (!includeArchived) {
-      return list.filter(m => m.status !== 'archived');
+    if (!this._cachedMemories) {
+      const raw = localStorage.getItem(STORAGE_KEYS.MEMORIES);
+      this._cachedMemories = raw ? (JSON.parse(raw) as MemoryItem[]) : [];
     }
-    return list;
+    const mems: MemoryItem[] = this._cachedMemories;
+    if (!includeArchived) {
+      return mems.filter(m => m.status !== 'archived');
+    }
+    return mems;
   }
 
   public saveMemories(memories: MemoryItem[]): void {
+    this._cachedMemories = memories;
     localStorage.setItem(STORAGE_KEYS.MEMORIES, JSON.stringify(memories));
   }
 
@@ -612,11 +637,15 @@ export class DatabaseService {
 
   // Knowledge Items
   public getKnowledge(): KnowledgeItem[] {
+    if (this._cachedKnowledge) return this._cachedKnowledge;
     const raw = localStorage.getItem(STORAGE_KEYS.KNOWLEDGE);
-    return raw ? JSON.parse(raw) : [];
+    const parsed: KnowledgeItem[] = raw ? (JSON.parse(raw) as KnowledgeItem[]) : [];
+    this._cachedKnowledge = parsed;
+    return parsed;
   }
 
   public saveKnowledge(items: KnowledgeItem[]): void {
+    this._cachedKnowledge = items;
     localStorage.setItem(STORAGE_KEYS.KNOWLEDGE, JSON.stringify(items));
   }
 
@@ -642,11 +671,15 @@ export class DatabaseService {
 
   // Examples Training
   public getExamples(): ExampleTrainingItem[] {
+    if (this._cachedExamples) return this._cachedExamples;
     const raw = localStorage.getItem(STORAGE_KEYS.EXAMPLES);
-    return raw ? JSON.parse(raw) : [];
+    const parsed: ExampleTrainingItem[] = raw ? (JSON.parse(raw) as ExampleTrainingItem[]) : [];
+    this._cachedExamples = parsed;
+    return parsed;
   }
 
   public saveExamples(items: ExampleTrainingItem[]): void {
+    this._cachedExamples = items;
     localStorage.setItem(STORAGE_KEYS.EXAMPLES, JSON.stringify(items));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('noar-examples-updated', { detail: { items } }));
@@ -712,11 +745,15 @@ export class DatabaseService {
 
   // Reminders & Work Schedule
   public getReminders(): ReminderItem[] {
+    if (this._cachedReminders) return this._cachedReminders;
     const raw = localStorage.getItem(STORAGE_KEYS.REMINDERS);
-    return raw ? JSON.parse(raw) : [];
+    const parsed: ReminderItem[] = raw ? (JSON.parse(raw) as ReminderItem[]) : [];
+    this._cachedReminders = parsed;
+    return parsed;
   }
 
   public saveReminders(items: ReminderItem[]): void {
+    this._cachedReminders = items;
     localStorage.setItem(STORAGE_KEYS.REMINDERS, JSON.stringify(items));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('noar-reminders-updated', { detail: { items } }));
@@ -748,13 +785,53 @@ export class DatabaseService {
     this.saveReminders(items);
   }
 
-  // Smart single or filtered reminder deletion (by keyword, index, or completion status)
-  public removeReminderSmart(query: { type: 'index' | 'completed' | 'keyword'; index?: number; keyword?: string }): DeleteReminderResult {
+  public clearAllReminders(): void {
+    this.saveReminders([]);
+  }
+
+  public clearCompletedReminders(): number {
+    const reminders = this.getReminders();
+    const pending = reminders.filter(r => !r.completed);
+    const count = reminders.length - pending.length;
+    this.saveReminders(pending);
+    return count;
+  }
+
+  public stripThaiToneMarks(text: string): string {
+    return (text || '').replace(/[\u0E48-\u0E4E]/g, '');
+  }
+
+  public getRecentReminder(): ReminderItem | undefined {
+    const items = this.getReminders();
+    return items.length > 0 ? items[0] : undefined;
+  }
+
+  // Smart single or filtered reminder deletion (by keyword, index, relative, demonstrative, or completion status)
+  public removeReminderSmart(query: {
+    type: 'index' | 'completed' | 'keyword' | 'latest' | 'first' | 'last' | 'all' | 'except';
+    index?: number;
+    keyword?: string;
+    exceptId?: string;
+    exceptKeyword?: string;
+  }): DeleteReminderResult {
     const reminders = this.getReminders();
     if (reminders.length === 0) {
       return { status: 'empty', remainingCount: 0 };
     }
 
+    // 1. Clear All
+    if (query.type === 'all') {
+      const count = reminders.length;
+      this.saveReminders([]);
+      return {
+        status: 'deleted',
+        deletedCount: count,
+        remainingCount: 0,
+        keyword: 'ตารางงานทั้งหมด',
+      };
+    }
+
+    // 2. Delete Completed
     if (query.type === 'completed') {
       const completedItems = reminders.filter(r => r.completed);
       if (completedItems.length === 0) {
@@ -771,6 +848,49 @@ export class DatabaseService {
       };
     }
 
+    // 3. Delete Latest / Most Recently Added
+    if (query.type === 'latest') {
+      const target = reminders[0];
+      const remaining = reminders.slice(1);
+      this.saveReminders(remaining);
+      return {
+        status: 'deleted',
+        deletedItem: target,
+        deletedCount: 1,
+        remainingCount: remaining.length,
+        keyword: target.title,
+      };
+    }
+
+    // 4. Delete First / Earliest
+    if (query.type === 'first') {
+      const target = reminders[0];
+      const remaining = reminders.slice(1);
+      this.saveReminders(remaining);
+      return {
+        status: 'deleted',
+        deletedItem: target,
+        deletedCount: 1,
+        remainingCount: remaining.length,
+        keyword: target.title,
+      };
+    }
+
+    // 5. Delete Last
+    if (query.type === 'last') {
+      const target = reminders[reminders.length - 1];
+      const remaining = reminders.slice(0, reminders.length - 1);
+      this.saveReminders(remaining);
+      return {
+        status: 'deleted',
+        deletedItem: target,
+        deletedCount: 1,
+        remainingCount: remaining.length,
+        keyword: target.title,
+      };
+    }
+
+    // 6. Delete by Index (1-based)
     if (query.type === 'index') {
       const idx = query.index;
       if (idx !== undefined && idx >= 1 && idx <= reminders.length) {
@@ -794,9 +914,45 @@ export class DatabaseService {
       }
     }
 
-    // Keyword or generic removal request
+    // 7. Delete all other tasks except a target (Keep one, delete others)
+    if (query.type === 'except') {
+      let target: ReminderItem | undefined;
+      if (query.exceptId) {
+        target = reminders.find(r => r.id === query.exceptId);
+      } else if (query.exceptKeyword) {
+        const cleanExcept = query.exceptKeyword.trim().toLowerCase();
+        target = reminders.find(r => r.title.toLowerCase().includes(cleanExcept) || cleanExcept.includes(r.title.toLowerCase()));
+      }
+
+      if (target) {
+        const deletedCount = reminders.length - 1;
+        this.saveReminders([target]);
+        return {
+          status: 'deleted',
+          deletedItem: target,
+          deletedCount,
+          remainingCount: 1,
+          keyword: `งานอื่นที่ไม่ใช่ "${target.title}"`,
+        };
+      } else {
+        return {
+          status: 'need_selection',
+          remainingCount: reminders.length,
+          allReminders: reminders,
+        };
+      }
+    }
+
+    // 8. Keyword or Demonstrative request
     const kw = (query.keyword || '').trim();
-    if (!kw) {
+    const cleanKw = kw
+      .replace(/^(?:งาน|เรื่อง|รายการ|นัด|สิ่งที่ต้องทำ|ไป|ตอน|เวลา|ที่|ของ)\s*/gi, '')
+      .replace(/\s*(?:ออก|ทิ้ง|ด้วย|หน่อย|ค่ะ|ครับ|นะ)$/gi, '')
+      .trim();
+
+    // Check demonstrative pronouns ("นั้น", "นั้นๆ", "นี้", "อันนั้น", "อันนี้", "งานนั้น", "งานนี้")
+    const isDemonstrativeOnly = !cleanKw || /^(?:นั้น|นั้นๆ|นี้|นู้น|โน้น|อันนั้น|อันนี้|ข้อนั้น|ข้อนี้|ตรงนั้น|ตรงนี้)$/i.test(cleanKw);
+    if (isDemonstrativeOnly) {
       if (reminders.length === 1) {
         const target = reminders[0];
         this.saveReminders([]);
@@ -815,13 +971,61 @@ export class DatabaseService {
       }
     }
 
-    const cleanKw = kw.toLowerCase();
-    const matches = reminders.filter(r =>
-      r.title.toLowerCase().includes(cleanKw) || cleanKw.includes(r.title.toLowerCase())
-    );
+    const kwLower = cleanKw.toLowerCase();
+    const kwStripped = this.stripThaiToneMarks(kwLower);
 
-    if (matches.length === 1) {
-      const target = matches[0];
+    // Multi-tier intelligent candidate scoring
+    interface ScoredReminder {
+      item: ReminderItem;
+      score: number;
+    }
+
+    const scoredList: ScoredReminder[] = reminders.map(r => {
+      let score = 0;
+      const titleLower = r.title.toLowerCase();
+      const titleStripped = this.stripThaiToneMarks(titleLower);
+      const timeLower = (r.time || '').toLowerCase();
+      const locLower = (r.location || '').toLowerCase();
+
+      // Exact title match
+      if (titleLower === kwLower) {
+        score += 100;
+      } else if (titleStripped === kwStripped) {
+        score += 90;
+      } else if (titleLower.includes(kwLower) || kwLower.includes(titleLower)) {
+        // Substring match
+        score += 70;
+      } else if (titleStripped.includes(kwStripped) || kwStripped.includes(titleStripped)) {
+        // Substring tone-free match
+        score += 60;
+      }
+
+      // Word tokens overlap (split by whitespace or length)
+      const kwTokens = kwLower.split(/[\s,.:;/-]+/).filter(t => t.length >= 2);
+      for (const tok of kwTokens) {
+        const tokStripped = this.stripThaiToneMarks(tok);
+        if (titleLower.includes(tok)) {
+          score += 25;
+        } else if (titleStripped.includes(tokStripped)) {
+          score += 20;
+        }
+        if (timeLower.includes(tok)) {
+          score += 15;
+        }
+        if (locLower.includes(tok)) {
+          score += 15;
+        }
+      }
+
+      return { item: r, score };
+    });
+
+    // Sort by score descending
+    scoredList.sort((a, b) => b.score - a.score);
+    const topCandidates = scoredList.filter(s => s.score >= 35);
+
+    if (topCandidates.length === 1) {
+      const target = topCandidates[0].item;
       const remaining = reminders.filter(r => r.id !== target.id);
       this.saveReminders(remaining);
       return {
@@ -831,10 +1035,23 @@ export class DatabaseService {
         remainingCount: remaining.length,
         keyword: kw,
       };
-    } else if (matches.length > 1) {
+    } else if (topCandidates.length > 1) {
+      // Check if top candidate has a commanding lead (score gap >= 25)
+      if (topCandidates[0].score >= topCandidates[1].score + 25) {
+        const target = topCandidates[0].item;
+        const remaining = reminders.filter(r => r.id !== target.id);
+        this.saveReminders(remaining);
+        return {
+          status: 'deleted',
+          deletedItem: target,
+          deletedCount: 1,
+          remainingCount: remaining.length,
+          keyword: kw,
+        };
+      }
       return {
         status: 'multiple_matches',
-        matches,
+        matches: topCandidates.map(c => c.item),
         remainingCount: reminders.length,
         keyword: kw,
       };
@@ -1214,6 +1431,14 @@ export class DatabaseService {
 
     localStorage.clear();
 
+    this._cachedSettings = null;
+    this._cachedPersonality = null;
+    this._cachedMemories = null;
+    this._cachedKnowledge = null;
+    this._cachedExamples = null;
+    this._cachedReminders = null;
+    this._cachedPlaylist = null;
+
     if (savedSettings) this.saveSettings(savedSettings);
     if (savedPersonality) this.savePersonality(savedPersonality);
 
@@ -1235,6 +1460,70 @@ export class DatabaseService {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('noar-storage-updated'));
     }
+  }
+
+  // ==========================================
+  // Music Playlist CRUD & Persistence
+  // ==========================================
+  public getPlaylist(): PlaylistItem[] {
+    if (this._cachedPlaylist) return this._cachedPlaylist;
+    const data = localStorage.getItem(STORAGE_KEYS.PLAYLIST);
+    if (data) {
+      try {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this._cachedPlaylist = parsed;
+          return this._cachedPlaylist;
+        }
+      } catch (e) {
+        console.warn('[DB] Failed to parse playlist', e);
+      }
+    }
+    this._cachedPlaylist = DEFAULT_MUSIC_PLAYLIST;
+    return this._cachedPlaylist;
+  }
+
+  public savePlaylist(items: PlaylistItem[]): void {
+    this._cachedPlaylist = items;
+    localStorage.setItem(STORAGE_KEYS.PLAYLIST, JSON.stringify(items));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('boai-playlist-updated', { detail: items }));
+    }
+    this.notifyStorageUpdated();
+  }
+
+  public addPlaylistItem(item: Omit<PlaylistItem, 'id'>): PlaylistItem {
+    const list = this.getPlaylist();
+    const newItem: PlaylistItem = {
+      ...item,
+      id: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    };
+    const updated = [newItem, ...list];
+    this.savePlaylist(updated);
+    return newItem;
+  }
+
+  public updatePlaylistItem(id: string, updates: Partial<PlaylistItem>): PlaylistItem | null {
+    const list = this.getPlaylist();
+    const index = list.findIndex(i => i.id === id);
+    if (index === -1) return null;
+    const updatedItem = { ...list[index], ...updates };
+    list[index] = updatedItem;
+    this.savePlaylist(list);
+    return updatedItem;
+  }
+
+  public deletePlaylistItem(id: string): boolean {
+    const list = this.getPlaylist();
+    const filtered = list.filter(i => i.id !== id);
+    if (filtered.length === list.length) return false;
+    this.savePlaylist(filtered);
+    return true;
+  }
+
+  public resetPlaylist(): PlaylistItem[] {
+    this.savePlaylist(DEFAULT_MUSIC_PLAYLIST);
+    return DEFAULT_MUSIC_PLAYLIST;
   }
 }
 

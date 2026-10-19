@@ -3,7 +3,12 @@ import { useAssistantStore } from '../stores/useAssistantStore';
 import { Maximize2, Mic, Volume2, VolumeX } from 'lucide-react';
 
 export const FloatingOrbWidget: React.FC = () => {
-  const { state, isMuted, statusText, toggleMiniMode, startVoiceInteraction, toggleMute } = useAssistantStore();
+  const state = useAssistantStore((s) => s.state);
+  const isMuted = useAssistantStore((s) => s.isMuted);
+  const statusText = useAssistantStore((s) => s.statusText);
+  const toggleMiniMode = useAssistantStore((s) => s.toggleMiniMode);
+  const startVoiceInteraction = useAssistantStore((s) => s.startVoiceInteraction);
+  const toggleMute = useAssistantStore((s) => s.toggleMute);
   const [isHovered, setIsHovered] = useState(false);
 
   // Dynamic glow & color theme based on assistant state
@@ -109,8 +114,12 @@ export const FloatingOrbWidget: React.FC = () => {
       >
         <button
           onClick={startVoiceInteraction}
-          title="เริ่มพูดสั่งการ"
-          className="p-1 rounded-full text-slate-300 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+          title={state === 'speaking' ? 'ขัดจังหวะโนอา (พูดขัดได้เลยค่ะ)' : 'เริ่มพูดสั่งการ'}
+          className={`p-1 rounded-full transition-colors ${
+            state === 'speaking'
+              ? 'text-amber-400 bg-amber-500/20 animate-pulse'
+              : 'text-slate-300 hover:text-cyan-400 hover:bg-cyan-500/10'
+          }`}
         >
           <Mic className="w-3.5 h-3.5" />
         </button>

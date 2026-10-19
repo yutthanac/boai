@@ -686,7 +686,209 @@
      - ปรับแต่งปุ่มลัดเรียกโนอาจากทุกโปรแกรม (เช่น `Alt+Space` หรือ `Ctrl+Shift+Space`) สามารถเปิดหน้าต่างสนทนาหรือเริ่มฟังคำสั่งเสียงได้ทันทีแม้กำลังเล่นเกมหรือทำงานอยู่ในโปรแกรมอื่น
 
 ---
-*บันทึกล่าสุด: 18 ตุลาคม 2026*
+
+### 33. การแก้ปัญหาคำสั่งเสียงลบ/เพิ่มงาน และขจัดปัญหางานค้างเวลาเลือกดู (Bulletproof Task Management & Anti-Hallucination)
+- **ปัญหาเดิม:**
+  1. ผู้ใช้สั่ง "บอกให้ลบงานนั้นๆ" หรือ "เอางานนั้นออก" แล้วโนอาบอกว่าลบให้แล้ว แต่เมื่อผู้ใช้ไปเลือกดูงานในระบบ งานนั้นยังคงค้างอยู่ ไม่ถูกลบออกจริง
+  2. โนอาไม่เข้าใจคำสั่งเกี่ยวกับการ "เพิ่มงานอื่น" หรือ "ลบงานอื่น" เช่น "บอกให้โนอาเพิ่มงานอื่นว่า...", "ลงงานเพิ่ม", "มีงานอื่นอีก"
+  3. คำสั่งภาษาไทยที่มีการผันวรรณยุกต์ คำนำหน้า หรือคำสร้อยลงท้ายหลากหลาย หลุดจากการดักจับ Fast-Path ไปยัง LLM (Gemini) และ LLM มโนตอบรับว่าทำรายการเสร็จสิ้นโดยไม่ได้สั่งลบฐานข้อมูล Local DB จริง
+- **สาเหตุเชิงลึก:**
+  1. `isDeleteTask` เดิมใน `aiService.ts` บังคับ Regex ต้องลงท้ายด้วย `(?:ออก|ทิ้ง|ให้หน่อย|ด้วย)$` ทำให้คำสั่งสั้นๆ เช่น "ลบงานสุกี้ตี้น้อย" หรือ "บอกให้ลบงานนั้นๆ" หลุด Regex
+  2. เมื่อหลุดไปที่ LLM ตัว LLM ถูกสั่งใน System Prompt ให้ตอบยืนยันสั้นๆ จึงสร้างข้อความตอบกลับเองว่าลบแล้ว แต่ระบบไม่มีตัวเชื่อมระหว่างคำตอบของ LLM กับฟังก์ชันฐานข้อมูล
+  3. ใน `buildSystemPrompt` ไม่ได้ฉีดรายการตารางงานที่บันทึกอยู่ในระบบส่งให้ LLM ทำให้ LLM ไม่รู้ว่าปัจจุบันมีงานอะไรอยู่บ้าง
+  4. คำสั่งกลุ่มสรรพนามอ้างอิง (Demonstrative Pronoun: "นั้น", "นั้นๆ", "นี้") ส่งคำว่า "นั้น" ไปค้นหาใน DB ตรงๆ ซึ่งไม่ตรงกับชื่องานใดๆ
+- **การแก้ไขและสถาปัตยกรรมใหม่ (Two-Tier Safety Architecture):**
+  1. **Tier 1: Smart Direct Intent Fast-Path (0ms Latency):**
+     - **Demonstrative & Context Resolution (6.5):** รองรับ "ลบงานนั้น", "ลบงานนั้นๆ", "ลบงานนี้", "เอางานนั้นออก", "บอกให้ลบงานนั้น" หากมีงานเดียวในตารางจะลบออกทันที หากมีหลายงานจะตรวจสอบบริบทประวัติข้อความสนทนาย้อนหลัง (`messages`) เพื่อหางานที่เพิ่งพูดถึงและลบอัตโนมัติ หากไม่ชัดเจนจะแจงรายการงานพร้อมหมายเลขให้ผู้ใช้เลือกลบ
+     - **Delete Other Tasks (6.6):** รองรับ "ลบงานอื่น", "ลบงานอื่นๆ", "ลบงานอื่นออก"
+     - **Delete Relative & Index (6.3 & 6.4):** รองรับ "ลบงานล่าสุด", "ลบงานแรก", "ลบงานสุดท้าย", "ลบรายการที่ 1", "ลบข้อ 2"
+     - **Delete Completed & Clear All (6.1 & 6.2):** รองรับ "ลบงานที่ทำเสร็จแล้วออก", "เคลียร์ตารางงาน", "ล้างงานทั้งหมด"
+     - **Unrestricted Keyword Deletion (6.7):** ปลดล็อก Regex ค้นหางานตามชื่อ ไม่บังคับคำลงท้าย พร้อมระบบ Multi-Tier Fuzzy Scoring ใน `databaseService.ts` (Exact Title 100pt -> Tone-Stripped 90pt -> Substring 70pt -> Token Overlap 25pt -> Time/Location Match)
+     - **Add Tasks Expansion (6.12 & 6.13):** รองรับ "เพิ่มงานอื่นว่า...", "ลงงานเพิ่ม", "มีงานอื่นอีก", "เพิ่มอีกงาน", "บอกให้โนอาเพิ่มงาน" และหากสั่ง "เพิ่มงาน" ลอยๆ ระบบจะถามเจาะจงว่าต้องการเพิ่มงานอะไร ช่วงเวลาและสถานที่ใด
+     - **Schedule Query Expansion (6.11):** รองรับ "เลือกดู", "เลือกดูงาน", "เวลาเลือกดู", "เลือกดูตารางงาน"
+  2. **Tier 2: Real-time Context Injection & Embedded Action Tags:**
+     - ฉีดรายการงานในฐานข้อมูลจริง (`db.getReminders()`) เข้าสู่ System Prompt ของทุก LLM Provider เพื่อให้ AI ทราบสถานะงานจริงตลอดเวลา
+     - สั่งให้ LLM แนบแท็กคำสั่ง เช่น `[[ACTION:DELETE_REMINDER:...]]` หรือ `[[ACTION:ADD_REMINDER:...]]` เมื่อผู้ใช้สั่งจัดการงาน
+     - สร้าง `executeEmbeddedActionTags` ใน `aiService.ts` เพื่อ Intercept แท็กเหล่านี้ สั่งกลไกฐานข้อมูลจริง (`db.removeReminderSmart`, `db.addReminder`, `db.deleteReminder`) และล้างแท็กออกจากข้อความที่จะอ่านออกเสียง TTS ทำให้ไม่มีปัญหา Ghost Task ค้างในระบบอีกต่อไป
+  3. **ยกระดับหน้า UI สำหรับการ "เวลาเลือกดูงาน" ([`src/pages/Tools.tsx`](file:///c:/Anewproject/boai/src/pages/Tools.tsx)):**
+     - เพิ่มแท็บกรองงาน (Filter Tabs): ทั้งหมด / รอดำเนินการ / เสร็จแล้ว พร้อมเคาน์เตอร์แสดงจำนวน
+     - เพิ่มกล่องค้นหางานแบบเรียลไทม์ (Search Filter Input)
+     - เพิ่มปุ่ม "ล้างที่เสร็จ" เพื่อเคลียร์งานที่เสร็จสิ้นได้อย่างรวดเร็ว
+     - ปรับแต่งการแสดงผลไอคอนเวลา (`Clock`), สถานที่ (`MapPin`) และลำดับงาน `#1, #2` ในสไตล์ Glassmorphism ตามมาตรฐาน Impeccable Design
+- **การทดสอบและผลลัพธ์:**
+  - สร้างสคริปต์ทดสอบอัตโนมัติ [`scripts/test-task-intents.cjs`](file:///c:/Anewproject/boai/scripts/test-task-intents.cjs) ครอบคลุม 10 กรณีสำคัญ ผ่านการทดสอบครบ 100%
+  - รัน `tsc && vite build && npm run build:electron` ผ่านสมบูรณ์แบบโดยไม่มี Error ใดๆ
+- **ไฟล์ที่เกี่ยวข้อง:**
+  - [`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts)
+  - [`src/services/ai/aiService.ts`](file:///c:/Anewproject/boai/src/services/ai/aiService.ts)
+  - [`src/pages/Tools.tsx`](file:///c:/Anewproject/boai/src/pages/Tools.tsx)
+  - [`scripts/test-task-intents.cjs`](file:///c:/Anewproject/boai/scripts/test-task-intents.cjs)
+
+---
+
+### 34. ระบบพูดขัดจังหวะโนอาแบบเรียลไทม์ (Voice Barge-in & Polite Interruption) 🛑🗣️✨
+- **ความต้องการของผู้ใช้:**
+  - อยากมีการพูดขัด (interrupt) โนอาได้ด้วย เผื่อโนอาพูดยาว
+  - ให้โนอาหยุดพูดทันทีและพูดตอบรับอย่างสุภาพ เช่น *"ค่ะๆ เชิญคุณพูดก่อนได้เลยค่ะ"* หรือ *"ค่ะๆ เชิญพูดก่อนเลยค่ะ"* แล้วเปิดไมค์รอฟังคำสั่งใหม่ของผู้ใช้ทันที
+- **การวิเคราะห์ทางเทคนิคและความท้าทาย (Technical Challenges & Architectural Solutions):**
+  1. **Acoustic Self-Echo Cancellation (ป้องกันเสียงลำโพงกระตุ้นให้ระบบขัดตัวเอง):**
+     - ในขณะที่โนอากำลังพูด เสียงจากลำโพงเครื่องอาจย้อนกลับเข้าไมโครโฟน STT ทำให้คำพูดของโนอาเองถูกเข้าใจผิดว่าเป็นเสียงผู้ใช้พูดขัด
+     - **คำที่เป็นกับดัก Substring:** คำว่า `"สภาพอากาศ"` มีตัวอักษร `"ภ-า-พ"` ติดกับ `"อ-า-ก-า-ศ"` ซึ่งมีคำว่า `"พอ"` ซ่อนอยู่ หากใช้ regex สั้นๆ เช่น `พอ` จะทำให้เวลาโนอาพูดรายงานอากาศ โนอาจะขัดจังหวะตัวเองทันที
+     - **วิธีแก้ปัญหา:**
+       - ติดตามข้อความที่โนอากำลังพูด (`currentSpokenText`)
+       - ตรวจสอบ Echo Check เป็นลำดับแรก หากข้อความที่ไมค์จับได้เป็น Substring ของสิ่งที่โนอากำลังพูดอยู่ จะถือว่าเป็นเสียงลำโพงสะท้อนและละเว้น (Ignore) ทันที
+       - ปรับปรุง Regex จากคำโดด เช่น `พอ` ให้เป็นคำประสมชัดเจน: `(?:พอแล้ว|พอก่อน|พอที|พอเถอะ|พอๆ)`
+  2. **Active Speech Interruptor Pipeline:**
+     - อนุญาตให้ `SpeechRecognition` ทำงานต่อเนื่องแม้ในขณะที่สถานะเป็น `speaking`
+     - รองรับสัญญาณขัด 3 รูปแบบ:
+       1. **Wake words:** `"โนอา"`, `"น้องโนอา"`, `"noar"`
+       2. **Interrupt commands:** `"หยุดก่อน"`, `"พอแล้ว"`, `"เดี๋ยวก่อน"`, `"แป๊บนะ"`, `"ฟังก่อน"`, `"เงียบก่อน"`, `"หยุดพูด"`, `"ขอพูดก่อน"` ฯลฯ
+       3. **Divergent speech:** หากผู้ใช้พูดข้อความยาวเกิน 4 ตัวอักษรที่ไม่ได้อยู่ในข้อความที่โนอากำลังพูด
+  3. **Immediate Speech Halting & Fast Yielding:**
+     - ตั้งค่าแฟล็ก `isSpeakingCancelled = true` สั่ง Break หลุดจากลูปสตรีมข้อความ TTS ทันที
+     - สั่ง `audioElement.pause()`, รีเซ็ต `src = ''`, และสั่ง `window.speechSynthesis.cancel()`
+     - ปลดล็อก `currentAudioResolve()` เพื่อไม่ให้ Promise ของฟังก์ชันพูดค้าง
+     - สุ่มวลีตอบรับสุภาพตามที่ต้องการ:
+       - *"ค่ะๆ เชิญคุณพูดก่อนได้เลยค่ะ"*
+       - *"ค่ะๆ เชิญพูดก่อนเลยค่ะ"*
+       - *"ได้เลยค่ะ เชิญคุณพูดก่อนเลยนะคะ"*
+     - เล่น Chime ตอบรับและพูดวลีตอบรับด้วยความเร็ว `1.35x` อย่างกระฉับกระเฉง โดยไม่ตกเข้าลูปขัดตัวเองซ้ำ (`isYielding = true`)
+  4. **Seamless Hand-off to Listening & Trailing Command Execution:**
+     - สลับสถานะ UI เป็น `listening` ทันที และเรียก `startManualVoiceCommand()`
+     - หากในประโยคที่พูดขัดมีคำสั่งต่อท้ายมาด้วย เช่น *"โนอา พอแล้ว ช่วยเปิดเพลงหน่อย"* ระบบจะตัดคำขัดออกและส่งคำสั่ง *"ช่วยเปิดเพลงหน่อย"* ไปประมวลผลทันทีโดยไม่ต้องรอให้ผู้ใช้สั่งซ้ำ
+  5. **UI Visual Feedback (Click-to-Interrupt):**
+     - **หน้ารวมห้องสนทนา ([`src/pages/Conversation.tsx`](file:///c:/Anewproject/boai/src/pages/Conversation.tsx)):** เมื่อโนอากำลังพูด ปุ่มไมค์จะเปลี่ยนเป็นสีส้มเรืองแสง (Amber Pulse) พร้อม Tooltip *"กดเพื่อขัดจังหวะโนอา (พูดขัดได้เลยค่ะ)"* สามารถคลิกเพื่อหยุดโนอาได้ทันที
+     - **3D LiveOrb ([`src/components/AiOrbVisualizer.tsx`](file:///c:/Anewproject/boai/src/components/AiOrbVisualizer.tsx)):** สามารถคลิกที่ตัวลูกแก้ว LiveOrb ขณะพูดเพื่อ Interrupt ได้ทันที
+     - **Mini Floating Widget ([`src/components/FloatingOrbWidget.tsx`](file:///c:/Anewproject/boai/src/components/FloatingOrbWidget.tsx)):** ปุ่มไมโครโฟนบนมินิวิดเจ็ตปรับเป็นสีส้มขัดจังหวะได้เช่นเดียวกัน
+- **การทดสอบและผลลัพธ์:**
+  - สร้างชุดทดสอบอัตโนมัติ [`scripts/test-barge-in.cjs`](file:///c:/Anewproject/boai/scripts/test-barge-in.cjs) ครอบคลุม 10 กรณีสำคัญ (Interrupt Keywords, Wake Words, Speaker Echo Filtering, Long Speech, Empty Speech) ผ่าน 10/10 กรณี (100%)
+  - รัน `tsc --noEmit` ผ่าน 0 errors
+  - รัน `npm run build` ผ่าน 100% ทั้ง Vite และ Electron
+- **ไฟล์ที่สร้าง/แก้ไข:**
+  - [`src/services/audio/audioService.ts`](file:///c:/Anewproject/boai/src/services/audio/audioService.ts)
+  - [`src/stores/useAssistantStore.ts`](file:///c:/Anewproject/boai/src/stores/useAssistantStore.ts)
+  - [`src/pages/Conversation.tsx`](file:///c:/Anewproject/boai/src/pages/Conversation.tsx)
+  - [`src/components/FloatingOrbWidget.tsx`](file:///c:/Anewproject/boai/src/components/FloatingOrbWidget.tsx)
+  - [`src/components/AiOrbVisualizer.tsx`](file:///c:/Anewproject/boai/src/components/AiOrbVisualizer.tsx)
+  - [`scripts/test-barge-in.cjs`](file:///c:/Anewproject/boai/scripts/test-barge-in.cjs)
+
+---
+
+### 35. ยกระดับ UI ผู้ช่วยเสียง NOAR สู่ระดับพรีเมียม ล้ำยุค และมินิมอล (Premium Minimalist Futuristic Voice Assistant Interface) 🔮⚡🎙️
+- **ความต้องการของผู้ใช้:**
+  - สร้างอินเทอร์เฟซผู้ช่วยเสียงระดับไฮเอนด์สำหรับ **NOAR** สไตล์ High-End Technology & Sci-Fi Interface
+  - **ทิศทางการออกแบบ:**
+    - มินิมอล เรียบหรู ล้ำยุค และเป็นมืออาชีพ
+    - โทนพื้นหลัง Dark Charcoal และ Near-Black พร้อม Subtle Gradients
+    - ระบบแสงสว่าง Soft Ice-Blue และ Cool-White Accent Lighting (ปราศจากสีนีออนม่วง/ชมพูเลอะเทอะ)
+    - ขอบบางประณีต (Thin borders), กระจกฝ้าละมุน (Subtle glassmorphism), เงาเบา และแสงเรืองนุ่มนวล
+    - ใช้ Negative Space อย่างลงตัวและการจัดวางแม่นยำ
+  - **โครงสร้างหลัก 6 ส่วน (Main Interface Layout):**
+    1. **Slim Top Navigation Bar:** ตัวอักษร NOAR wordmark tracking กว้าง หรูหรา + ไฟสถานะและป้ายกำกับ Neural Core ด้านซ้าย พร้อมชุดควบคุมระบบเสียงแบบ Understated ด้านขวา (หลอดไฟวัดระดับเสียงไมค์สด, ปุ่ม Mute/Unmute, ปุ่มเปิดตั้งค่าเสียง)
+    2. **Centered AI Orb (แกนภาพหลัก):**
+       - แอนิเมชันหายใจ (Breathing) ช้าๆ นุ่มนวล ปรับ Scale และ Opacity ตามจังหวะ
+       - แสงขอบ Soft Cool-Blue Rim Light ที่เปลี่ยนความเข้มอย่างละมุน
+       - เลเยอร์ Radial Gradients สร้างมิติความลึกเหมือนลูกแก้วฟิวเจอริสติกพร้อมจุดสะท้อนแสง Specular Glass
+       - สถานะ Listening: ลูกแก้วขยายและตอบสนองตามเสียงไมโครโฟน
+       - สถานะ Thinking: วงแหวนไฮไลต์หมุนรอบลูกแก้วช้าๆ สุขุม (`@keyframes noarOrbitRing`)
+       - สถานะ Speaking: ขยายและกระเพื่อมตาม Amplitude และจังหวะเสียงพูดจริงของ AI
+       - สถานะ Paused: สแตนด์บายในโหมดฝ้านิ่งสงบ ไม่รบกวนสายตา
+    3. **Delicate Symmetrical Audio Waveform:**
+       - คลื่นเสียงแนวนอนแบบสมมาตร (Symmetrical Bars & Flowing SVG Spline) ทอดยาวออกจากลูกแก้วทั้งฝั่งซ้ายและขวา
+       - เชื่อมต่อสัญญาณเสียงจริงผ่าน Web Audio API และ `AnalyserNode` เมื่ออยู่ในโหมด `listening`
+       - ตอบสนองตาม Amplitude เสียงพูดสังเคราะห์จริงเมื่ออยู่ในโหมด `speaking`
+       - ปรับเป็นคลื่น Sine นุ่มนวลในโหมด `idle` โดยไม่หลอกสร้างเสียงแหลมปลอม
+    4. **Minimal Status Panel & Short Response Preview:**
+       - ไฟสถานะและป้ายระบุสถานะปัจจุบัน (`Listening...`, `Thinking...`, `Speaking...`, `Paused`, `Ready`)
+       - กล่องข้อความ Preview แบบมินิมอล แสดงข้อความที่กำลังพูดหรือข้อความตอบกลับล่าสุดในฟอนต์ `Noto Sans Thai`
+    5. **Three Circular Controls (ปุ่มควบคุมทรงกลม 3 ปุ่มด้านล่าง):**
+       - ปุ่มไมโครโฟน (ซ้าย): กดสั่งงานด้วยเสียง หรือกดขัดจังหวะโนอา (Barge-in) เมื่อกำลังพูด
+       - ปุ่ม Pause / Resume (กลาง - ขนาดเด่น 54px): กดพักเสียงพูดหรือสั่งเล่นต่อ พร้อมไอคอนสลับอัตโนมัติ
+       - ปุ่ม Close (ขวา): ปิด/ย่อหน้าต่าง หรือสลับกลับไปยังหน้าห้องแชท
+    6. **Discreet Footer:**
+       - ข้อความระบุอัตลักษณ์ `NOAR • AUTONOMOUS COGNITIVE INTERFACE` พร้อมรายละเอียด Local Engine 0ms Latency
+  - **การเคลื่อนไหวและเทคนิค (Motion & Technical Requirements):**
+    - แยกสถานะ 5 สภาวะชัดเจน: `idle`, `listening`, `thinking`, `speaking`, `paused`
+    - รองรับ CSS Transitions 60fps และรองรับ `@media (prefers-reduced-motion: reduce)`
+    - แยก UI ออกเป็น Reusable Component มี Props และ Callbacks ชัดเจน (`onMicClick`, `onPauseResume`, `onClose`, `onSettingsClick`)
+- **การทดสอบและผลลัพธ์:**
+  - ผ่านการตรวจสอบ Impeccable Mechanical Detector พบ **0 Anti-patterns (`[]`)** (ขจัดโทนสีบอกความเป็น AI เช่น ม่วง/ชมพู ออกทั้งหมด คงเฉพาะโทน Ice-Blue, Cool-Slate, และ Charcoal)
+  - TypeScript Compiler (`tsc --noEmit`): ผ่าน 0 errors
+  - Production Build (`npm run build`): ผ่าน 100% (ทั้ง Vite และ Electron compilation สำเร็จ 0 errors)
+- **ไฟล์ที่สร้าง/แก้ไข:**
+  - [`src/components/AiOrbVisualizer.tsx`](file:///c:/Anewproject/boai/src/components/AiOrbVisualizer.tsx)
+  - [`src/services/audio/audioService.ts`](file:///c:/Anewproject/boai/src/services/audio/audioService.ts)
+  - [`src/pages/Home.tsx`](file:///c:/Anewproject/boai/src/pages/Home.tsx)
+  - [`src/index.css`](file:///c:/Anewproject/boai/src/index.css)
+  - [`worklog.md`](file:///c:/Anewproject/boai/worklog.md)
+
+---
+
+### 36. ปรับเปลี่ยนเวทีโนอาเป็นแบบแบนเนอร์เต็มเซกชันไร้กรอบ พร้อมเส้นเสียงแนวนอนและใบหน้าขยับปากสมจริง (Seamless Banner Noah Orb with Fluid Voice Waves) 🌊🐶✨
+- **ความต้องการของผู้ใช้:**
+  - ไม่ต้องการกรอบ/กล่องครอบ และไม่ต้องมีปุ่มรอบๆ (ตัดปุ่มไมค์, ปุ่ม pause, ปุ่ม close, และแถบนำทางออกทั้งหมดเพื่อความสะอาดตา)
+  - ต้องการให้มีเฉพาะ **ลูกแก้วที่เป็นตัวโนอาพูด** (3D LiveOrb มีลูกตามองตามเมาส์ กะพริบตา และขยับปากสมจริงตามเสียงพูด)
+  - ปรับให้โนอาครอบคลุม **เต็ม section เดียวไปเลยคล้ายๆ Banner** แนวนอน
+  - มี **เส้นเสียง (Audio Waveform Lines)** เชื่อมต่อขนาบข้างแนวนอนสวยงาม
+- **การดำเนินการและสถาปัตยกรรม UI ใหม่:**
+  1. **Borderless Full-Section Banner:**
+     - ขจัดกรอบการ์ดซ้ำซ้อน (`glass-panel`) และเส้นขอบแข็งทั้งหมด ปรับเป็น Banner พื้นหลังโปร่งโล่ง พร้อมเส้นแสงขอบฟ้าอ่อน (Horizon Glow Beam) และแสงละมุน Cyan Atmosphere
+  2. **The Living Noah Character (ขยับปากพูดจริง):**
+     - ใช้ 3D WebGL LiveOrb ของโนอา (ลูกแก้วมีดวงตาสะท้อนแสง ติดตามเคอร์เซอร์เมาส์ และกะพริบตาเป็นธรรมชาติ)
+     - มีปากขยับพูดแบบสมจริง (`animate-bo-mouth-talk`) พร้อมฟันบน ลิ้นสีชมพู และออร่าเสียง (`animate-bo-voice-ring`) เมื่อโนอาพูด
+     - ปากกลม attentive "o" เรืองแสงฟ้าเมื่อกำลังฟัง และยิ้มหวาน `◡` เมื่อสแตนด์บาย
+     - คลิกที่ตัวโนอาเพื่อเริ่มพูดคุย หรือคลิกเพื่อขัดจังหวะ (Barge-in) ได้อย่างเป็นธรรมชาติโดยไม่ต้องมีปุ่มควบคุมเกะกะ
+  3. **เส้นเสียงแนวนอนสมบูรณ์แบบ (Horizontal Fluid Soundwave Lines):**
+     - เส้นคลื่นเสียง Fluid SVG Spline เรืองแสงทอดยาวจากขอบจอทั้งสองฝั่งเข้าสู่ตัวโนอา
+     - แถบความถี่ Equalizer Symmetrical Bars 24 แท่งขนาบข้างซ้าย-ขวา
+     - เชื่อมต่อสัญญาณเสียงจริงผ่าน Web Audio API (`AnalyserNode`) ในสถานะ `listening` และกระเพื่อมตามจังหวะเสียงพูดจริงในสถานะ `speaking`
+     - เคลื่อนไหวเป็นคลื่น Sine นุ่มนวลในสถานะ `idle`
+  4. **คำบรรยายเสียงโนอาใต้ภาพ (Clean Subtitle Caption):**
+     - แสดงข้อความที่โนอากำลังพูดหรือข้อความตอบกลับล่าสุดอย่างสบายตา ไร้ปุ่มรบกวน
+- **ผลการทดสอบและการตรวจสอบคุณภาพ:**
+  - Impeccable Mechanical Detector: ผ่าน 0 Anti-Patterns (`[]`)
+  - TypeScript Compilation (`tsc --noEmit`): ผ่าน 0 errors
+  - Production Build (`npm run build`): ผ่าน 100% (ทั้ง Vite bundle และ Electron compilation สำเร็จ 0 errors)
+- **ไฟล์ที่สร้าง/แก้ไข:**
+  - [`src/components/AiOrbVisualizer.tsx`](file:///c:/Anewproject/boai/src/components/AiOrbVisualizer.tsx)
+  - [`src/pages/Home.tsx`](file:///c:/Anewproject/boai/src/pages/Home.tsx)
+  - [`worklog.md`](file:///c:/Anewproject/boai/worklog.md)
+
+---
+
+### 37. ปรับเปลี่ยนลูกแก้ว NOAR สู่สไตล์ Sci-Fi Glass Orb ตามภาพอ้างอิง พร้อมเส้นคลื่นเสียงขยับตามเสียงพูดจริง (Sci-Fi Glass Orb with Electric Crescent & Voice-Reactive Fluid Soundwaves) 🔮🌌🌊
+- **ความต้องการของผู้ใช้:**
+  - เปลี่ยนลูกแก้วแบบเดิมออกทั้งหมด ไม่เอาตากับปากแล้ว
+  - สร้างให้ออกมาเป็นสไตล์ Sci-Fi Glass Orb ตามภาพอ้างอิง:
+    - วงแหวนกระจกทรงกลมด้านนอก พร้อมเส้นแสงเรืองรองส่วนบน-ขวา (Top-Right Glowing Orbital Arc)
+    - ทรงกลมแก้วสี Obsidian ชั้นใน พร้อมแสงเรืองโค้งสีฟ้าสว่างที่ฐานล่าง (Bottom Electric-Blue Crescent Glow)
+    - ไอคอน Equalizer 5 ขีดตรงกลางลูกแก้ว
+    - เส้นคลื่นเสียงริบบิ้นแนวนอน (Horizontal Sinusoidal Soundwave Ribbons) ทอดยาวออกไปทั้งสองข้าง
+  - **ข้อกำหนดสำคัญ:** เมื่อโนอาพูดให้เส้นคลื่นเสียงขยับตามเสียงพูดแบบเรียลไทม์ ("พอโนอาพูดให้เส้นขยับตามเสียง")
+- **การดำเนินการและสถาปัตยกรรม UI ใหม่ ([`src/components/AiOrbVisualizer.tsx`](file:///c:/Anewproject/boai/src/components/AiOrbVisualizer.tsx)):**
+  1. **Sci-Fi Concentric Glass Orb Architecture (ตรงตามภาพ 100%):**
+     - **วงแหวนนอก (Outer Glass Orbit Ring):** ทรงกลมขนาด 260px ขอบกระจกบางเฉียบ `border-white/[0.09]` พร้อมส่วนโค้งเรืองแสงด้านบนขวา (Top-Right Orbital Arc) สร้างด้วย SVG Gradient และ DropShadow Glow แบบหมุนรอบได้ในสถานะ Thinking
+     - **ลูกแก้วชั้นใน (Inner Obsidian Glass Sphere):** ทรงกลมขนาด 190px พื้นผิว `radial-gradient` ไล่น้ำหนักแบบลูกแก้ว Sci-Fi ลึก มีแสงสะท้อนทรงกลมด้านบนซ้าย
+     - **ขอบแสงสีฟ้าโค้งด้านล่าง (Bottom Electric-Blue Crescent Glow):** แสงเรืองแสงสีฟ้าไอซ์บลูเข้มข้น (`#38bdf8`) บริเวณขอบล่างของลูกแก้ว พร้อมเส้นแสงสะท้อน Flare สว่างตรงตามภาพอ้างอิง
+     - **Equalizer 5 ขีดใจกลางลูกแก้ว (Center 5-Bar Voice Indicator):** แท่งมนไล่ระดับความสูงสมมาตรตรงกลาง เต้นระบำและกระเพื่อมตามจังหวะเสียงพูดของโนอาและเสียงไมโครโฟน
+  2. **เส้นเสียงริบบิ้นขยับตามเสียงพูดจริง (Voice-Reactive Fluid Soundwave Ribbons):**
+     - ใช้ HTML5 High-Performance Canvas วาดเส้นคลื่นเสียง Sinusoidal Ribbon 4 เส้นที่สอดประสานกันอย่างนุ่มนวลทั้งฝั่งซ้ายและฝั่งขวา
+     - **เมื่อโนอาพูด (`speaking`):** ตัวคูณ Amplitude ขยายตัวและกระเพื่อมตามจังหวะคำพูดของโนอาแบบไดนามิก 60fps (เส้นคลื่นเสียงเต้นระบำและพลิ้วไหวตามความดัง-เบาของเสียงจริง)
+     - **เมื่อผู้ใช้พูด (`listening`):** ตัวคูณ Amplitude ตอบสนองตามระดับเสียงไมโครโฟนจริงจาก Web Audio API
+     - **เมื่อสแตนด์บาย (`idle`):** พลิ้วไหวเป็นคลื่น Sine ช้าๆ นุ่มนวล ดูมีชีวิตชีวาและสงบนิ่ง
+  3. **การสั่งงานที่เรียบหรู:**
+     - สามารถคลิกที่ตัวลูกแก้วเพื่อเริ่มคุย หรือคลิกเพื่อขัดจังหวะโนอา (Barge-in) ได้ทันที
+     - แสดงข้อความที่โนอากำลังพูดเป็น Subtitle ด้านล่างแบบมินิมอล ไร้ปุ่มรกสายตา
+- **ผลการทดสอบและการตรวจสอบคุณภาพ:**
+  - Impeccable Mechanical Detector: ผ่าน 0 Anti-Patterns (`[]`)
+  - TypeScript Compilation (`tsc --noEmit`): ผ่าน 0 errors
+  - Production Build (`npm run build`): ผ่าน 100% (ทั้ง Vite bundle และ Electron compilation สำเร็จ 0 errors)
+- **ไฟล์ที่สร้าง/แก้ไข:**
+  - [`src/components/AiOrbVisualizer.tsx`](file:///c:/Anewproject/boai/src/components/AiOrbVisualizer.tsx)
+  - [`worklog.md`](file:///c:/Anewproject/boai/worklog.md)
+
+---
+*บันทึกล่าสุด: 19 ตุลาคม 2026*
 
 
 

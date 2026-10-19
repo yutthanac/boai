@@ -8,6 +8,13 @@
   color-scheme: dark;
   font-family: 'Noto Sans Thai', 'Noto Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size-adjust: from-font;
+  --bg-primary: #121212;
+  --bg-surface: #1E1E1E;
+  --bg-elevated: #252525;
+  --bg-hover: #2A2A2A;
+  --border-subtle: #2A2A2A;
+  --text-main: #EDEDED;
+  --text-muted: #A1A1AA;
 }
 
 html,
@@ -19,6 +26,11 @@ select,
 textarea {
   font-family: 'Noto Sans Thai', 'Noto Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size-adjust: from-font;
+}
+
+body {
+  background-color: #121212;
+  color: #EDEDED;
 }
 
 code,
@@ -48,15 +60,15 @@ pre,
   background: rgba(148, 163, 184, 0.4);
 }
 
-/* Fast Solid Panel Styles - Zero GPU Blur Lag */
+/* Fast Solid Panel Styles - Dark Minimalist Premium */
 .glass-panel {
-  background-color: #0f1523;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background-color: #1E1E1E;
+  border: 1px solid #2A2A2A;
 }
 
 .glass-panel-elevated {
-  background-color: #151d30;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: #252525;
+  border: 1px solid #333333;
 }
 
 /* Window Drag Area for Electron */
@@ -740,4 +752,113 @@ html.light ::-webkit-scrollbar-thumb:hover,
   animation: boEarPerkRight 2.4s ease-in-out infinite;
   transform-origin: bottom left;
 }
+
+/* ==========================================================================
+   NOAR Premium Futuristic Voice Assistant Design System & Keyframes
+   ========================================================================== */
+
+/* 1. Orb Idle Breathing Animation */
+@keyframes noarOrbBreathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.94;
+    box-shadow: 0 0 35px -5px rgba(56, 189, 248, 0.22), inset 0 0 25px rgba(56, 189, 248, 0.15);
+  }
+  50% {
+    transform: scale(1.026);
+    opacity: 1;
+    box-shadow: 0 0 55px -2px rgba(56, 189, 248, 0.38), inset 0 0 38px rgba(186, 230, 253, 0.25);
+  }
+}
+
+.animate-noar-orb-breathe {
+  animation: noarOrbBreathe 4.5s ease-in-out infinite;
+}
+
+/* 2. Soft Cool-Blue Rim Light Shift */
+@keyframes noarRimShift {
+  0%, 100% {
+    border-color: rgba(56, 189, 248, 0.25);
+    filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.2));
+  }
+  50% {
+    border-color: rgba(186, 230, 253, 0.6);
+    filter: drop-shadow(0 0 24px rgba(56, 189, 248, 0.45));
+  }
+}
+
+.animate-noar-rim-shift {
+  animation: noarRimShift 5s ease-in-out infinite;
+}
+
+/* 3. Thinking State Orbiting Highlight */
+@keyframes noarOrbitRing {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-noar-orbit-ring {
+  animation: noarOrbitRing 7s linear infinite;
+}
+
+/* 4. Listening Gentle Expansion */
+@keyframes noarListenPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 32px rgba(56, 189, 248, 0.3), inset 0 0 20px rgba(56, 189, 248, 0.25);
+  }
+  50% {
+    transform: scale(1.042);
+    box-shadow: 0 0 60px rgba(56, 189, 248, 0.5), inset 0 0 38px rgba(56, 189, 248, 0.4);
+  }
+}
+
+.animate-noar-listen-pulse {
+  animation: noarListenPulse 2.8s ease-in-out infinite;
+}
+
+/* 5. Delicate Glass Specular Shimmer */
+@keyframes noarGlassShimmer {
+  0%, 100% {
+    opacity: 0.35;
+    transform: translateY(0px) scaleX(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: translateY(-1.5px) scaleX(1.04);
+  }
+}
+
+.animate-noar-glass-shimmer {
+  animation: noarGlassShimmer 4s ease-in-out infinite;
+}
+
+/* 6. Subtle Symmetrical Waveform Idle Flow */
+@keyframes noarWaveIdle {
+  0%, 100% {
+    transform: scaleY(0.35);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scaleY(0.95);
+    opacity: 0.85;
+  }
+}
+
+/* 7. Reduced Motion Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .animate-noar-orb-breathe,
+  .animate-noar-rim-shift,
+  .animate-noar-orbit-ring,
+  .animate-noar-listen-pulse,
+  .animate-noar-glass-shimmer {
+    animation: none !important;
+    transition: opacity 0.3s ease !important;
+  }
+}
+
 

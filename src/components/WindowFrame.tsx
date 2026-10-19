@@ -2,7 +2,14 @@ import { Minus, Square, X, Volume2, Mic, MicOff, Minimize2, Sun, Moon } from 'lu
 import { useAssistantStore } from '../stores/useAssistantStore';
 
 export const WindowFrame: React.FC = () => {
-  const { state, statusText, isMuted, toggleMute, isAlwaysListening, toggleMiniMode, theme, toggleTheme } = useAssistantStore();
+  const state = useAssistantStore((s) => s.state);
+  const statusText = useAssistantStore((s) => s.statusText);
+  const isMuted = useAssistantStore((s) => s.isMuted);
+  const toggleMute = useAssistantStore((s) => s.toggleMute);
+  const isAlwaysListening = useAssistantStore((s) => s.isAlwaysListening);
+  const toggleMiniMode = useAssistantStore((s) => s.toggleMiniMode);
+  const theme = useAssistantStore((s) => s.theme);
+  const toggleTheme = useAssistantStore((s) => s.toggleTheme);
 
   const getStateBadge = () => {
     switch (state) {
@@ -36,25 +43,25 @@ export const WindowFrame: React.FC = () => {
   const badge = getStateBadge();
 
   return (
-    <header className="h-10 w-full bg-[#0b0f19] border-b border-white/[0.08] flex items-center justify-between px-3 select-none window-drag-region z-50">
+    <header className="h-10 w-full bg-[#181818] border-b border-[#2A2A2A] flex items-center justify-between px-3 select-none window-drag-region z-50">
       {/* Left: App Title and Icon */}
       <div className="flex items-center gap-2.5 window-no-drag">
         <div className="w-6 h-6 rounded-md bg-white p-0.5 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
           <img src="/bobo.png" alt="Noar AI" className="w-full h-full object-contain rounded-sm" />
         </div>
-        <span className="font-semibold text-xs tracking-wide text-slate-200">
-          NOAR AI <span className="text-[11px] font-normal text-slate-400">(โนอา)</span>
+        <span className="font-medium text-xs tracking-wide text-slate-200">
+          NOAR AI <span className="text-xs font-normal text-slate-400">(โนอา)</span>
         </span>
 
         {/* Status Pill */}
-        <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-medium transition-colors ${badge.color}`}>
+        <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-normal transition-colors ${badge.color}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
           <span>{badge.text}</span>
         </div>
       </div>
 
       {/* Center status message snippet */}
-      <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 truncate max-w-sm">
+      <div className="hidden md:flex items-center gap-1.5 text-xs font-normal text-slate-400 truncate max-w-sm">
         <span className="text-slate-500">•</span>
         <span className="truncate">{statusText}</span>
       </div>

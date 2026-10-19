@@ -8,16 +8,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#090A0F',
-        surface: '#0E121B',
-        'surface-elevated': '#151B28',
-        'surface-hover': '#1C2436',
-        border: 'rgba(255, 255, 255, 0.08)',
-        'border-focus': 'rgba(99, 102, 241, 0.4)',
+        background: '#121212',
+        'bg-primary': '#121212',
+        surface: '#1E1E1E',
+        'surface-elevated': '#252525',
+        'surface-hover': '#2A2A2A',
+        border: '#2A2A2A',
+        'border-subtle': '#2A2A2A',
+        'border-focus': 'rgba(56, 189, 248, 0.4)',
         primary: {
-          DEFAULT: '#6366F1',
-          hover: '#4F46E5',
-          light: '#818CF8'
+          DEFAULT: '#38BDF8',
+          hover: '#0EA5E9',
+          light: '#7DD3FC'
         },
         cyan: {
           neon: '#00F0FF',

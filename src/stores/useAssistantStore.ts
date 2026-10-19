@@ -36,6 +36,7 @@ interface AssistantStore {
   loadInitialData: () => void;
   sendMessage: (text: string) => Promise<void>;
   startVoiceInteraction: () => Promise<void>;
+  interruptSpeaking: () => Promise<void>;
   clearConversation: () => void;
   selectConversation: (id: string) => void;
   setMiniMode: (enable: boolean) => Promise<void>;
@@ -49,6 +50,10 @@ interface AssistantStore {
   setMusicMuted: (muted: boolean) => void;
   skipNextMusic: () => void;
   playPlaylistItem: (index: number) => void;
+  addPlaylistItem: (item: Omit<import('../types').PlaylistItem, 'id'>) => void;
+  updatePlaylistItem: (id: string, updates: Partial<import('../types').PlaylistItem>) => void;
+  deletePlaylistItem: (id: string) => void;
+  resetPlaylistToDefault: () => void;
   resolvePendingMemory: (action: 'confirm' | 'dismiss' | 'edit', editedFact?: string) => void;
 }
 
@@ -72,7 +77,7 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
     return saved ? parseFloat(saved) : 0.8;
   })(),
   isMusicMuted: false,
-  musicPlaylist: DEFAULT_MUSIC_PLAYLIST,
+  musicPlaylist: db.getPlaylist(),
   currentPlaylistIndex: 0,
   pendingMemoryAction: null,
   theme: (typeof window !== 'undefined' && localStorage.getItem('bo_theme') === 'light') ? 'light' : 'dark',
@@ -234,6 +239,26 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
     }
   },
 
+  addPlaylistItem: (item) => {
+    db.addPlaylistItem(item);
+    set({ musicPlaylist: db.getPlaylist() });
+  },
+
+  updatePlaylistItem: (id, updates) => {
+    db.updatePlaylistItem(id, updates);
+    set({ musicPlaylist: db.getPlaylist() });
+  },
+
+  deletePlaylistItem: (id) => {
+    db.deletePlaylistItem(id);
+    set({ musicPlaylist: db.getPlaylist() });
+  },
+
+  resetPlaylistToDefault: () => {
+    const list = db.resetPlaylist();
+    set({ musicPlaylist: list, currentPlaylistIndex: 0 });
+  },
+
   resolvePendingMemory: (action, editedFact) => {
     const pending = get().pendingMemoryAction;
     if (!pending) return;
@@ -323,7 +348,10 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
 
       // Register Wake Word trigger
       audioService.onWakeWordDetected(() => {
-        if (!get().isMuted && get().state === 'idle') {
+        if (!get().isMuted) {
+          if (get().state === 'speaking') {
+            audioService.stopSpeaking();
+          }
           set({
             state: 'listening',
             statusText: 'กำลังฟังอยู่จ้า... (พูดได้เลยนะ)',
@@ -396,6 +424,13 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
         else if (action === 'volume_increase') get().adjustMusicVolume(0.10);
         else if (action === 'mute') get().setMusicMuted(true);
         else if (action === 'unmute') get().setMusicMuted(false);
+      }) as EventListener);
+
+      // Web custom event for playlist updates
+      window.addEventListener('boai-playlist-updated', ((event: CustomEvent) => {
+        if (event.detail && Array.isArray(event.detail)) {
+          set({ musicPlaylist: event.detail });
+        }
       }) as EventListener);
     }
 
@@ -488,12 +523,27 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
   },
 
   startVoiceInteraction: async () => {
-    if (get().state !== 'idle') return;
+    // If Noah is currently speaking, stop speaking immediately and switch to listening
+    if (get().state === 'speaking') {
+      audioService.stopSpeaking();
+    }
 
     set({
       state: 'listening',
       statusText: 'กำลังฟังอยู่จ้า... (พูดได้เลยนะ)',
     });
     audioService.startManualVoiceCommand();
+  },
+
+  interruptSpeaking: async () => {
+    if (get().state === 'speaking') {
+      audioService.stopSpeaking();
+      audioService.setSpeakingState(false);
+      set({
+        state: 'listening',
+        statusText: 'กำลังฟังอยู่จ้า... (พูดได้เลยนะ)',
+      });
+      audioService.startManualVoiceCommand();
+    }
   },
 }));

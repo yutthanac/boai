@@ -17,19 +17,17 @@ import {
 } from 'lucide-react';
 
 export const MiniMusicBar: React.FC = () => {
-  const {
-    musicTrack,
-    musicVolume,
-    isMusicMuted,
-    musicPlaylist,
-    currentPlaylistIndex,
-    toggleMusicPlayPause,
-    stopMusic,
-    setMusicVolume,
-    setMusicMuted,
-    skipNextMusic,
-    playPlaylistItem,
-  } = useAssistantStore();
+  const musicTrack = useAssistantStore((s) => s.musicTrack);
+  const musicVolume = useAssistantStore((s) => s.musicVolume);
+  const isMusicMuted = useAssistantStore((s) => s.isMusicMuted);
+  const musicPlaylist = useAssistantStore((s) => s.musicPlaylist);
+  const currentPlaylistIndex = useAssistantStore((s) => s.currentPlaylistIndex);
+  const toggleMusicPlayPause = useAssistantStore((s) => s.toggleMusicPlayPause);
+  const stopMusic = useAssistantStore((s) => s.stopMusic);
+  const setMusicVolume = useAssistantStore((s) => s.setMusicVolume);
+  const setMusicMuted = useAssistantStore((s) => s.setMusicMuted);
+  const skipNextMusic = useAssistantStore((s) => s.skipNextMusic);
+  const playPlaylistItem = useAssistantStore((s) => s.playPlaylistItem);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);

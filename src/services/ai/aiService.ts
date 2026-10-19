@@ -1,4 +1,4 @@
-import { ChatMessage, PersonalityConfig, LLMProvider, ProviderQuotaInfo } from '../../types';
+import { ChatMessage, PersonalityConfig, LLMProvider, ProviderQuotaInfo, ReminderItem } from '../../types';
 import { db } from '../db/databaseService';
 import { weatherService } from '../weather/weatherService';
 import { musicService } from '../music/musicService';
@@ -215,6 +215,24 @@ ${tuning.conciseness >= 75
       });
     }
 
+    // Active Reminders & Work Schedule State Injection (Prevents Hallucination & Keeps System Synced)
+    const activeReminders = db.getReminders();
+    if (activeReminders.length > 0) {
+      prompt += `--- รายการตารางงานและการแจ้งเตือนในระบบปัจจุบัน (Real-time Database Schedule) ---\n`;
+      activeReminders.forEach((r, idx) => {
+        const status = r.completed ? '[เสร็จสิ้นแล้ว]' : '[รอดำเนินการ]';
+        prompt += `${idx + 1}. ID: "${r.id}" | ชื่องาน: "${r.title}" | เวลา: "${r.time || 'ไม่ระบุ'}"${r.location ? ` | สถานที่: "${r.location}"` : ''} | สถานะ: ${status}\n`;
+      });
+      prompt += `\n[คำสั่งจัดการตารางงานอัตโนมัติ]:
+- เมื่อผู้ใช้สั่งให้ลบงาน, เอางานออก, ยกเลิกงาน (เช่น "ลบงานนั้น", "ลบงานนั้นๆ", "ลบงานประชุม", "เอางานล่าสุดออก") ให้ใส่แท็ก [[ACTION:DELETE_REMINDER:ID_หรือ_ชื่องาน]] ต่อท้ายคำตอบเสมอ เช่น [[ACTION:DELETE_REMINDER:${activeReminders[0]?.id || 'ID_งาน'}]] หรือ [[ACTION:DELETE_REMINDER:all]] หากสั่งลบทั้งหมด
+- เมื่อผู้ใช้สั่งเพิ่มงาน หรือลงตารางงาน ให้ใส่แท็ก [[ACTION:ADD_REMINDER:ชื่องาน|เวลา|สถานที่]] ต่อท้ายคำตอบเสมอ เช่น [[ACTION:ADD_REMINDER:ประชุมทีม|14:00 น.|ห้อง A]]
+- ระบบจะนำแท็กนี้ไปสั่งการฐานข้อมูลจริงทันที และลบแท็กออกจากเสียงพูดโดยอัตโนมัติ\n\n`;
+    } else {
+      prompt += `--- รายการตารางงานและการแจ้งเตือนในระบบปัจจุบัน ---\n(ขณะนี้ยังไม่มีงานในระบบ)\n\n`;
+      prompt += `[คำสั่งจัดการตารางงานอัตโนมัติ]:
+- เมื่อผู้ใช้สั่งเพิ่มงาน หรือลงตารางงาน ให้ใส่แท็ก [[ACTION:ADD_REMINDER:ชื่องาน|เวลา|สถานที่]] ต่อท้ายคำตอบเสมอ\n\n`;
+    }
+
     return prompt;
   }
 
@@ -371,8 +389,71 @@ ${tuning.conciseness >= 75
     const settings = db.getSettings();
     const systemPrompt = this.buildSystemPrompt(latestUserMessage);
 
-    const content = await this.dispatchToLLM(messages, systemPrompt, settings);
+    const rawContent = await this.dispatchToLLM(messages, systemPrompt, settings);
+    const content = this.executeEmbeddedActionTags(rawContent);
     return { content: this.stripEmojisAndStickers(content) };
+  }
+
+  // Intercept and execute embedded action tags from LLMs to ensure database mutations occur
+  public executeEmbeddedActionTags(text: string): string {
+    if (!text || !text.includes('[[ACTION:')) return text;
+
+    let processed = text;
+
+    // 1. DELETE_REMINDER
+    const delRegex = /\[\[ACTION:DELETE_REMINDER:(.+?)\]\]/gi;
+    let delMatch;
+    while ((delMatch = delRegex.exec(text)) !== null) {
+      const target = delMatch[1].trim();
+      try {
+        if (target.toLowerCase() === 'all' || target === 'ทั้งหมด') {
+          db.clearAllReminders();
+        } else if (target.toLowerCase() === 'completed' || target === 'เสร็จแล้ว') {
+          db.removeReminderSmart({ type: 'completed' });
+        } else if (target.toLowerCase() === 'latest' || target === 'ล่าสุด') {
+          db.removeReminderSmart({ type: 'latest' });
+        } else if (target.startsWith('rem_')) {
+          db.deleteReminder(target);
+        } else {
+          db.removeReminderSmart({ type: 'keyword', keyword: target });
+        }
+      } catch (err) {
+        console.warn('executeEmbeddedActionTags delete error:', err);
+      }
+    }
+
+    // 2. ADD_REMINDER
+    const addRegex = /\[\[ACTION:ADD_REMINDER:(.+?)\]\]/gi;
+    let addMatch;
+    while ((addMatch = addRegex.exec(text)) !== null) {
+      const payload = addMatch[1].trim();
+      try {
+        const parts = payload.split('|').map(p => p.trim());
+        const title = parts[0] || 'งานที่บันทึก';
+        const time = parts[1] || 'ไม่ระบุเวลา';
+        const location = parts[2] || undefined;
+        db.addReminder(title, time, location);
+      } catch (err) {
+        console.warn('executeEmbeddedActionTags add error:', err);
+      }
+    }
+
+    // 3. COMPLETE_REMINDER
+    const completeRegex = /\[\[ACTION:COMPLETE_REMINDER:(.+?)\]\]/gi;
+    let compMatch;
+    while ((compMatch = completeRegex.exec(text)) !== null) {
+      const target = compMatch[1].trim();
+      try {
+        db.completeReminderSmart({ keyword: target });
+      } catch (err) {
+        console.warn('executeEmbeddedActionTags complete error:', err);
+      }
+    }
+
+    // Clean all action tags from final spoken/displayed text
+    processed = processed.replace(/\[\[ACTION:[^\]]+\]\]/gi, '').trim();
+
+    return processed;
   }
 
   public async chat(messages: ChatMessage[]): Promise<string> {
@@ -888,6 +969,83 @@ ${tuning.conciseness >= 75
     // 3. Music / Audio Stream & YouTube Song Request
     if (musicService.isMusicIntent(text)) {
       const isRemoteRequest = /(?:remote|รีโมท|ในเครื่อง|บนเครื่อง|ในคอม|บนคอม|เบราว์เซอร์)/i.test(text);
+      const playlist = db.getPlaylist();
+
+      // 3.1 Check index or explicit playlist request ("เปิดเพลงในลิสต์", "เล่นเพลงในลิสต์", "เพลงที่ 1 ในลิสต์", "เล่นเพลงแรก")
+      const playlistIndexMatch = text.match(/(?:เพลง|ลำดับ|หมายเลข)\s*(?:ที่|ลำดับที่)?\s*(\d+|แรก|หนึ่ง|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ)/i);
+      const isExplicitPlaylistCmd = /(?:ในลิสต์|ในลิส|เพลย์ลิสต์|เพลย์ลิส)/i.test(text);
+
+      if ((isExplicitPlaylistCmd || playlistIndexMatch) && playlist.length > 0) {
+        let targetIndex = 0;
+        if (playlistIndexMatch && playlistIndexMatch[1]) {
+          const rawNum = playlistIndexMatch[1];
+          const thMap: Record<string, number> = {
+            'แรก': 1, 'หนึ่ง': 1, 'สอง': 2, 'สาม': 3, 'สี่': 4, 'ห้า': 5,
+            'หก': 6, 'เจ็ด': 7, 'แปด': 8, 'เก้า': 9, 'สิบ': 10
+          };
+          targetIndex = (thMap[rawNum] || parseInt(rawNum, 10) || 1) - 1;
+        }
+        if (targetIndex < 0) targetIndex = 0;
+        if (targetIndex >= playlist.length) targetIndex = playlist.length - 1;
+
+        const item = playlist[targetIndex];
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('boai-music-state', {
+            detail: {
+              title: item.title,
+              artist: item.artist,
+              isPlaying: true,
+              videoId: item.videoId,
+              embedUrl: item.videoId
+                ? `https://www.youtube-nocookie.com/embed/${item.videoId}?autoplay=1&enablejsapi=1`
+                : undefined,
+              audioStreamUrl: item.audioStreamUrl,
+              playbackMode: item.playbackMode,
+              url: item.videoId
+                ? `https://www.youtube.com/watch?v=${item.videoId}`
+                : `https://music.youtube.com/search?q=${encodeURIComponent(item.title)}`,
+              source: item.playbackMode === 'stream' ? 'direct_stream' : 'youtube_music',
+              updatedAt: new Date().toISOString()
+            }
+          }));
+        }
+        return `เปิดเพลง "${item.title}" ลำดับที่ ${targetIndex + 1} จากในเพลย์ลิสต์ให้แล้วค่ะ`;
+      }
+
+      // 3.2 Check title / artist match from the user's custom playlist
+      const rawClean = text.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|ช่วย|รบกวน|บอก|สั่ง)?\s*(?:เปิดเพลง|เล่นเพลง|ขอเพลง|ฟังเพลง|เปิด)\s*/i, '')
+                           .replace(/(?:ให้หน่อย|หน่อย|นะ|ด้วย|ครับ|ค่ะ)$/i, '').trim().toLowerCase();
+      if (rawClean.length >= 2 && playlist.length > 0) {
+        const matchedItem = playlist.find(p =>
+          p.title.toLowerCase().includes(rawClean) ||
+          (p.artist && p.artist.toLowerCase().includes(rawClean))
+        );
+        if (matchedItem) {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('boai-music-state', {
+              detail: {
+                title: matchedItem.title,
+                artist: matchedItem.artist,
+                isPlaying: true,
+                videoId: matchedItem.videoId,
+                embedUrl: matchedItem.videoId
+                  ? `https://www.youtube-nocookie.com/embed/${matchedItem.videoId}?autoplay=1&enablejsapi=1`
+                  : undefined,
+                audioStreamUrl: matchedItem.audioStreamUrl,
+                playbackMode: matchedItem.playbackMode,
+                url: matchedItem.videoId
+                  ? `https://www.youtube.com/watch?v=${matchedItem.videoId}`
+                  : `https://music.youtube.com/search?q=${encodeURIComponent(matchedItem.title)}`,
+                source: matchedItem.playbackMode === 'stream' ? 'direct_stream' : 'youtube_music',
+                updatedAt: new Date().toISOString()
+              }
+            }));
+          }
+          return `เปิดเพลง "${matchedItem.title}" จากในลิสต์เพลงให้เรียบร้อยแล้วค่ะ`;
+        }
+      }
+
+      // 3.3 Default / YouTube search fallback
       const songInfo = await musicService.openMusic(text, isRemoteRequest);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('boai-music-state', {
@@ -951,31 +1109,26 @@ ${tuning.conciseness >= 75
       }
     }
 
-    // 6. Reminders & Work Schedule (Deletion, Completion, Export, LINE Push, Query, Save)
+    // 6. Reminders & Work Schedule (Deletion, Relative/Anaphora Resolution, Completion, Export, LINE Push, Query, Save)
+    let cleanScheduleText = text.trim();
+    cleanScheduleText = cleanScheduleText.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noar)\s*[,.:;]?\s*/gi, '');
+    cleanScheduleText = cleanScheduleText.replace(/^(?:ช่วย|รบกวน|กรุณา|วาน|ให้|บอกให้(?:โนอา|ไอ้โนอา|น้องโนอา)?|บอก(?:โนอา)?)\s*/gi, '');
+    cleanScheduleText = cleanScheduleText.replace(/(?:นะแก|นะจ๊ะ|หน่อยนะ|หน่อยดิ|หน่อยสิ|หน่อยครับ|หน่อยค่ะ|หน่อย|ให้หน่อยนะ|ให้หน่อยครับ|ให้หน่อยค่ะ|ให้หน่อยดิ|ให้หน่อยสิ|ให้หน่อย|ให้เราหน่อย|ให้ฉันหน่อย|ด้วยนะ|ด้วยครับ|ด้วยค่ะ|ด้วย|ทีครับ|ทีค่ะ|ที|ซิ|ซี่)$/gi, '').trim();
+
     // 6.0 Inquiry on whether task removal is actually deleted in system
     const isQuestionAboutDeletion = /(?:ยังไม่ได้.*(?:รึป่าว|หรือเปล่า|รึเปล่า|ไหม|มั้ย)|หรือยัง|รึยัง|ทำไม.*(?:ไม่ออก|ไม่ลบ))/i.test(text);
     if (isQuestionAboutDeletion && /(?:งาน|ตารางงาน|ระบบ|แจ้งเตือน)/i.test(text) && /(?:ออก|ลบ)/i.test(text)) {
       const reminders = db.getReminders();
-      return `ใช่ค่ะ ก่อนหน้านี้ระบบยังไม่ได้ลบออกจากฐานข้อมูลจริง แต่ตอนนี้โนอาได้อัปเดตระบบให้ลบออกจากระบบจริงได้แล้วค่ะ (ปัจจุบันมีงานในตารางทั้งหมด ${reminders.length} รายการค่ะ)`;
+      return `ระบบได้ดำเนินการลบออกจากฐานข้อมูลจริงเรียบร้อยแล้วค่ะ (ปัจจุบันมีงานคงเหลือในตารางทั้งหมด ${reminders.length} รายการค่ะ)`;
     }
 
     // 6.1 Clear All Reminders / Schedule
-    // Covers: "เอาตารางงานออก", "ลบตารางงานออก", "เคลียร์ตารางงาน", "เอาตารางออก", "ลบตารางออก", "ลบตารางงานทั้งหมด", "เอางานในตารางงานออก", "เอางานออกจากระบบ", "ล้างตารางงาน"
-    let cleanClearText = text.trim();
-    cleanClearText = cleanClearText.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noar)\s*[,.:;]?\s*/gi, '');
-    cleanClearText = cleanClearText.replace(/^(?:ช่วย|รบกวน|กรุณา|วาน|ให้)?\s*/gi, '');
-    cleanClearText = cleanClearText.replace(/(?:นะแก|นะจ๊ะ|หน่อยนะ|หน่อยดิ|หน่อยสิ|หน่อยครับ|หน่อยค่ะ|หน่อย|ให้หน่อยนะ|ให้หน่อยครับ|ให้หน่อยค่ะ|ให้หน่อยดิ|ให้หน่อยสิ|ให้หน่อย|ให้เราหน่อย|ให้ฉันหน่อย|ด้วยนะ|ด้วยครับ|ด้วยค่ะ|ด้วย|ทีครับ|ทีค่ะ|ที|ซิ|ซี่)$/gi, '').trim();
-
+    // Covers: "เอาตารางงานออก", "ลบตารางงานออก", "เคลียร์ตารางงาน", "เอาตารางออก", "ลบตารางออก", "ลบตารางงานทั้งหมด", "ลบงานทั้งหมด", "เอางานในตารางงานออก", "เอางานออกจากระบบ", "ล้างตารางงาน", "ล้างงาน", "ลบงานออกให้หมด"
     const isClearAllSchedule = (
-      /(?:ลบ|เคลียร์|ล้าง|เอา)\s*(?:การ)?(?:แจ้งเตือน|ตารางงาน|นัด|รายการเตือน|ตาราง|คิวงาน)\s*(?:ทั้งหมด|หมดเลย|ทุกอัน|ออกให้หมด|ออกหมด)/i.test(text) ||
-      (
-        !/(?:มี|ดู|เช็ค|ตรวจ|บอก|ขอดู|มีอะไร|แสดง|บันทึก|ช่วยเตือน|เตือนฉันตอน|ลงตารางงานว่า|\d+)/i.test(cleanClearText) &&
-        (
-          /(?:เอา|ลบ|เคลียร์|ล้าง)\s*(?:การ)?(?:แจ้งเตือน|ตารางงาน|นัด|รายการเตือน|ตาราง|คิวงาน)\s*(?:ออก|ทิ้ง)?$/i.test(cleanClearText) ||
-          /(?:เอา|ลบ|เคลียร์|ล้าง)\s*(?:งาน)?(?:ในตารางงาน|ในระบบ|ในตาราง|ออกจากตารางงาน|ออกจากระบบ)\s*(?:ออก|ทิ้ง)?$/i.test(cleanClearText)
-        )
-      )
-    );
+      /(?:ลบ|เคลียร์|ล้าง|เอา)\s*(?:การ)?(?:แจ้งเตือน|ตารางงาน|นัด|รายการเตือน|ตาราง|คิวงาน|งาน)\s*(?:ทั้งหมด|หมดเลย|ทุกอัน|ออกให้หมด|ออกหมด|ให้หมด)/i.test(text) ||
+      /(?:ลบ|เคลียร์|ล้าง|เอา)\s*(?:งาน)?(?:ในตารางงาน|ในระบบ|ในตาราง|ออกจากตารางงาน|ออกจากระบบ)\s*(?:ออก|ทิ้ง)?$/i.test(cleanScheduleText) ||
+      /^(?:ลบ|เคลียร์|ล้าง|เอา)\s*(?:การ)?(?:แจ้งเตือน|ตารางงาน|นัด|รายการเตือน|ตาราง|คิวงาน)\s*(?:ออก|ทิ้ง)?$/i.test(cleanScheduleText)
+    ) && !/(?:มี|ดู|เช็ค|ตรวจ|บอก|ขอดู|มีอะไร|แสดง|บันทึก|ช่วยเตือน|เตือนฉันตอน|ลงตารางงานว่า|\d+)/i.test(cleanScheduleText);
 
     if (isClearAllSchedule) {
       const current = db.getReminders();
@@ -999,7 +1152,7 @@ ${tuning.conciseness >= 75
       return `ลบรายการงานที่ทำเสร็จแล้ว (${res.deletedCount} รายการ) ออกจากระบบเรียบร้อยแล้วค่ะ (เหลืองานที่ต้องทำอีก ${res.remainingCount} รายการ)`;
     }
 
-    // 6.3 Delete by Index ("ลบรายการที่ 1 ออก", "เอาอันที่ 2 ออก", "เอางานลำดับที่ 1 ออก")
+    // 6.3 Delete by Index ("ลบรายการที่ 1 ออก", "เอาอันที่ 2 ออก", "เอางานลำดับที่ 1 ออก", "ลบข้อ 2")
     const deleteIndexMatch = text.match(/(?:ลบ|เอา|ยกเลิก|ตัด|เคลียร์)\s*(?:รายการที่|อันที่|งานที่|ข้อที่|ลำดับที่|รายการ|อัน|งาน|ข้อ|เบอร์)\s*(\d+)\s*(?:ออก(?:จาก(?:ตารางงาน|ระบบ|เครื่อง)?)?|ทิ้ง|ให้หน่อย|ด้วย)?$/i);
     if (deleteIndexMatch) {
       const idx = parseInt(deleteIndexMatch[1], 10);
@@ -1014,21 +1167,89 @@ ${tuning.conciseness >= 75
       return `ลบรายการที่ ${idx} "${res.deletedItem?.title}" ออกจากระบบเรียบร้อยแล้วค่ะ (${remCountText})`;
     }
 
-    // 6.4 Delete Specific Task by keyword ("ลบงานประชุมออกจากตารางงาน", "เอางานส่งรายงานออก")
+    // 6.4 Delete Relative ("ลบงานล่าสุด", "เอางานล่าสุดออก", "ลบงานที่เพิ่งเพิ่ม", "ลบงานเมื่อกี้", "ลบงานแรก", "ลบงานสุดท้าย")
+    const isDeleteRelative = /(?:ลบ|เอา|เคลียร์|ตัด|ทิ้ง)\s*(?:รายการ|งาน|นัด)?\s*(ล่าสุด|ที่เพิ่งเพิ่ม|เมื่อกี้|อันล่าสุด|แรก|อันแรก|ข้อแรก|สุดท้าย|อันสุดท้าย|หลังสุด)/i.test(cleanScheduleText);
+    if (isDeleteRelative) {
+      const relMatch = cleanScheduleText.match(/(ล่าสุด|ที่เพิ่งเพิ่ม|เมื่อกี้|อันล่าสุด|แรก|อันแรก|ข้อแรก|สุดท้าย|อันสุดท้าย|หลังสุด)/i);
+      const relType = relMatch ? relMatch[1] : 'ล่าสุด';
+      const type = /(?:แรก|อันแรก|ข้อแรก)/i.test(relType) ? 'first' : /(?:สุดท้าย|อันสุดท้าย|หลังสุด)/i.test(relType) ? 'last' : 'latest';
+      const res = db.removeReminderSmart({ type });
+      if (res.status === 'empty') {
+        return `ตอนนี้ไม่มีรายการแจ้งเตือนหรือตารางงานในระบบอยู่แล้วค่ะ`;
+      }
+      const remCountText = res.remainingCount > 0 ? `เหลืองานในตารางอีก ${res.remainingCount} รายการค่ะ` : `ไม่มีงานค้างในระบบแล้วค่ะ`;
+      return `ลบงาน${relType} "${res.deletedItem?.title}" ออกจากระบบเรียบร้อยแล้วค่ะ (${remCountText})`;
+    }
+
+    // 6.5 Delete Demonstrative / Anaphora Reference ("ลบงานนั้น", "ลบงานนั้นๆ", "ลบงานนี้", "เอางานนั้นออก", "เอางานนี้ออก", "ลบอันนั้นออก", "บอกให้ลบงานนั้น")
+    const isDemonstrativeDelete = /^(?:บอกให้(?:โนอา)?\s*)?(?:ลบ|เอา|เคลียร์|ตัด|ทิ้ง)\s*(?:งาน|รายการ|นัด|อัน)?\s*(?:นั้นๆ|นั้น|นี้|นู้น|โน้น)\s*(?:ออก(?:จาก(?:ตารางงาน|ระบบ)?)?|ทิ้ง)?$/i.test(cleanScheduleText);
+    if (isDemonstrativeDelete) {
+      const reminders = db.getReminders();
+      if (reminders.length === 0) {
+        return `ตอนนี้ไม่มีรายการแจ้งเตือนหรือตารางงานในระบบอยู่แล้วค่ะ`;
+      }
+      if (reminders.length === 1) {
+        const target = reminders[0];
+        db.deleteReminder(target.id);
+        return `ลบงาน "${target.title}" ออกจากระบบเรียบร้อยแล้วค่ะ (ตอนนี้ไม่มีงานค้างในระบบแล้วค่ะ)`;
+      }
+
+      // If multiple reminders, search recent message history to see what was just discussed
+      let matchedRecent: ReminderItem | undefined;
+      if (messages && messages.length > 0) {
+        const recentMsgs = messages.slice(-6);
+        for (let i = recentMsgs.length - 1; i >= 0; i--) {
+          const mContent = recentMsgs[i].content;
+          for (const r of reminders) {
+            if (mContent.includes(r.title) || (r.title.length >= 3 && mContent.toLowerCase().includes(r.title.toLowerCase()))) {
+              matchedRecent = r;
+              break;
+            }
+          }
+          if (matchedRecent) break;
+        }
+      }
+
+      if (matchedRecent) {
+        db.deleteReminder(matchedRecent.id);
+        const remCount = db.getReminders().length;
+        const remCountText = remCount > 0 ? `เหลืองานในตารางอีก ${remCount} รายการค่ะ` : `ไม่มีงานค้างในระบบแล้วค่ะ`;
+        return `ลบงาน "${matchedRecent.title}" ออกจากระบบเรียบร้อยแล้วค่ะ (${remCountText})`;
+      }
+
+      // If ambiguous, list reminders and ask user
+      let msg = `ในตารางงานมี ${reminders.length} รายการ ต้องการให้โนอาลบงานไหนคะ บอกชื่องานหรือระบุลำดับได้เลยค่ะ:\n`;
+      msg += reminders.map((r, i) => `${i + 1}. [${r.time}] ${r.title}${r.location ? ` (สถานที่: ${r.location})` : ''}`).join('\n');
+      return msg;
+    }
+
+    // 6.6 Delete Other Tasks ("ลบงานอื่น", "ลบงานอื่นๆ", "ลบงานอื่นออก", "ลบงานอื่นให้หมด")
+    const isDeleteOtherTasks = /^(?:บอกให้(?:โนอา)?\s*)?(?:ลบ|เอา|เคลียร์|ตัด|ทิ้ง)\s*(?:งาน|รายการ|นัด)?\s*(?:อื่น|อื่นๆ|ที่เหลือ)\s*(?:ออก(?:จาก(?:ตารางงาน|ระบบ)?)?|ทิ้ง|ให้หมด|หมด)?$/i.test(cleanScheduleText);
+    if (isDeleteOtherTasks) {
+      const reminders = db.getReminders();
+      if (reminders.length <= 1) {
+        return `ตอนนี้ในตารางมีเพียงงานเดียว (${reminders[0]?.title || 'ไม่มีงาน'}) ไม่มีงานอื่นแล้วค่ะ`;
+      }
+      let msg = `ในตารางงานมีทั้งหมด ${reminders.length} รายการ ต้องการให้เก็บงานไหนไว้ หรือต้องการให้ลบงานไหนบ้างคะ บอกโนอาได้เลยค่ะ:\n`;
+      msg += reminders.map((r, i) => `${i + 1}. [${r.time}] ${r.title}${r.location ? ` (สถานที่: ${r.location})` : ''}`).join('\n');
+      return msg;
+    }
+
+    // 6.7 Delete Specific Task by keyword ("ลบงานสุกี้ตี้น้อย", "บอกให้โนอาลบงาน...", "เอางานประชุมออก")
     const isDeleteTask = (
-      /(?:ลบ|เอา|ยกเลิก|ตัด)\s*(?:รายการ|การแจ้งเตือน|ตารางงาน|นัด|งาน|สิ่งที่ต้องทำ)?\s*(.+?)\s*(?:ออก(?:จาก(?:ตารางงาน|ระบบ|เครื่อง)?)?|ทิ้ง|ให้หน่อย|ด้วย)$/i.test(text) ||
-      /(?:เอางาน|ลบงาน|เอารายการ|ลบรายการ)\s+(?!ใน|ออก)(.+?)\s*(?:ออกจากตารางงาน|ออกจากระบบ|ออก|ทิ้ง)/i.test(text)
-    ) && !/(?:บันทึก|ช่วยเตือน|เตือนฉันตอน|ลงตาราง)/i.test(text);
+      /^(?:บอกให้(?:โนอา|ไอ้โนอา|น้องโนอา)?\s*)?(?:ลบ|เอา|ยกเลิก|ตัด|เคลียร์|ทิ้ง)\s*(?:รายการ|การแจ้งเตือน|ตารางงาน|นัด|งาน|สิ่งที่ต้องทำ)\s*(.+)/i.test(cleanScheduleText) ||
+      /^(?:เอางาน|ลบงาน|เอารายการ|ลบรายการ)\s+(.+)/i.test(cleanScheduleText) ||
+      /^(?:ลบ|เอาออก|ยกเลิก)\s+(.+?)\s*(?:ออก(?:จาก(?:ตารางงาน|ระบบ|เครื่อง)?)?|ทิ้ง)?$/i.test(cleanScheduleText)
+    ) && !/(?:บันทึก|ช่วยเตือน|เตือนฉันตอน|ลงตาราง|เพิ่มงาน|มีงาน|ดูงาน|ตารางงานมี)/i.test(text);
 
     if (isDeleteTask) {
-      let clean = text.trim();
-      clean = clean.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noar)\s*[,.:;]?\s*/gi, '');
-      clean = clean.replace(/(?:นะแก|นะจ๊ะ|หน่อยนะ|หน่อยดิ|หน่อยสิ|หน่อยครับ|หน่อยค่ะ|หน่อย|ให้หน่อยนะ|ให้หน่อยครับ|ให้หน่อยค่ะ|ให้หน่อยดิ|ให้หน่อยสิ|ให้หน่อย|ให้เราหน่อย|ให้ฉันหน่อย|ด้วยนะ|ด้วยครับ|ด้วยค่ะ|ด้วย|ทีครับ|ทีค่ะ|ที|ซิ|ซี่)$/gi, '');
-      clean = clean.replace(/\s*(?:ออก(?:จาก(?:ตารางงาน|ระบบ|เครื่อง)?)?|ทิ้ง|ออกไป)$/gi, '');
-      clean = clean.replace(/^(?:ช่วย|รบกวน|กรุณา|วาน)?\s*(?:ลบ|เอา|ยกเลิก|เคลียร์|ตัด)\s*/gi, '');
+      let clean = cleanScheduleText;
+      clean = clean.replace(/^(?:บอกให้(?:โนอา|ไอ้โนอา|น้องโนอา)?|ให้(?:โนอา|ไอ้โนอา|น้องโนอา)?|บอก(?:โนอา)?|ช่วย(?:โนอา)?|รบกวน|กรุณา|วาน)?\s*/gi, '');
+      clean = clean.replace(/^(?:ลบ|เอาออก|เอา|ยกเลิก|เคลียร์|ตัด|ทิ้ง)\s*/gi, '');
       clean = clean.replace(/^(?:รายการ|การแจ้งเตือน|ตารางงาน|นัด|คิวงาน|สิ่งที่ต้องทำ)\s*/gi, '');
       clean = clean.replace(/^งาน\s*(?:ใน(?:ตารางงาน|ระบบ)?)?\s*/gi, '');
       clean = clean.replace(/^(?:ในตารางงาน|ในระบบ)\s*/gi, '');
+      clean = clean.replace(/\s*(?:ออก(?:จาก(?:ตารางงาน|ระบบ|เครื่อง)?)?|ทิ้ง|ออกไป)$/gi, '');
       clean = clean.trim();
 
       const res = db.removeReminderSmart({ type: 'keyword', keyword: clean });
@@ -1054,9 +1275,9 @@ ${tuning.conciseness >= 75
       }
     }
 
-    // 6.5 Complete Task Intent ("ทำงานประชุมเสร็จแล้ว", "ทำรายการที่ 1 เสร็จแล้ว", "ประชุมทีมเสร็จแล้ว")
+    // 6.8 Complete Task Intent ("ทำงานประชุมเสร็จแล้ว", "ทำรายการที่ 1 เสร็จแล้ว", "ประชุมทีมเสร็จแล้ว")
     const completeMatch = text.match(/(?:ทำ(?:งาน)?|เสร็จ)?\s*(?:รายการที่|อันที่|งานที่|ข้อที่|ลำดับที่)?\s*(\d+)?\s*(?:งาน|รายการ|นัด|เรื่อง)?\s*(.+?)?\s*(?:เสร็จแล้ว|เสร็จสิ้น|เรียบร้อยแล้ว)/i);
-    if (completeMatch && !/(?:บันทึก|ช่วยเตือน|เตือนฉันตอน|ลงตาราง)/i.test(text)) {
+    if (completeMatch && !/(?:บันทึก|ช่วยเตือน|เตือนฉันตอน|ลงตาราง|เพิ่มงาน|มีงาน)/i.test(text)) {
       const idx = completeMatch[1] ? parseInt(completeMatch[1], 10) : undefined;
       let subject = (completeMatch[2] || '').trim();
       subject = subject.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noar)\s*[,.:;]?\s*/gi, '');
@@ -1083,7 +1304,7 @@ ${tuning.conciseness >= 75
       }
     }
 
-    // 6.6 Export Reminders & Work Schedule (CSV Download)
+    // 6.9 Export Reminders & Work Schedule (CSV Download)
     const isExportSchedule = (
       /(?:export|ส่งออก|ดาวน์โหลด|download)\s*(?:ตารางงาน|การแจ้งเตือน|แจ้งเตือน|ตาราง|กำหนดการ|คิวงาน|reminders?|schedule|ไฟล์)?/i.test(text) ||
       /(?:ตารางงาน|การแจ้งเตือน|แจ้งเตือน|reminders?|schedule)\s*(?:export|ส่งออก|ดาวน์โหลด)/i.test(text) ||
@@ -1103,7 +1324,7 @@ ${tuning.conciseness >= 75
       return `ส่งออกตารางงานและการแจ้งเตือนทั้งหมด (${reminders.length} รายการ) เป็นไฟล์ CSV ให้เรียบร้อยแล้วค่ะ`;
     }
 
-    // 6.7 Send Schedule to LINE Official Account (Strict rule: ONLY send when explicitly requested to send to LINE)
+    // 6.10 Send Schedule to LINE Official Account (Strict rule: ONLY send when explicitly requested to send to LINE)
     const isSendScheduleToLine = (
       /(?:ส่ง|แชร์|ฟอร์เวิร์ด|forward|push)\s*(?:ตารางงาน|การแจ้งเตือน|ตาราง|กำหนดการ|คิวงาน|แจ้งเตือน|reminders?|schedule|สิ่งที่ต้องทำ)?\s*(?:ของ)?(?:วันนี้|พรุ่งนี้|เมื่อวาน|วันที่\s*\d+|สัปดาห์นี้|เดือนนี้)?\s*(?:ไป(?:ยัง|ที่)?)?\s*(?:line|ไลน์)/i.test(text) ||
       /(?:line|ไลน์)\s*(?:ส่ง|แชร์)?\s*(?:ตารางงาน|การแจ้งเตือน|ตาราง|กำหนดการ|คิวงาน|แจ้งเตือน)?/i.test(text) ||
@@ -1115,15 +1336,17 @@ ${tuning.conciseness >= 75
       return lineRes.message;
     }
 
-    // 6.8 Query / List Reminders & Work Schedule (Standardized pattern display)
+    // 6.11 Query / List Reminders & Work Schedule (Standardized pattern display)
     const isScheduleQuery = (
-      /(?:มี|ดู|เช็ค|ตรวจ|บอก|ขอ|สรุป|เปิด|เอา.*มาดู|ขอดู|แสดง)\s*(?:รายการ)?\s*(?:การ)?(?:แจ้งเตือน|เตือน|นัด|ตารางงาน|ตาราง|กำหนดการ|คิวงาน)/i.test(text) ||
-      /(?:เอา|ขอ|เปิด|ดึง)\s*(?:ตารางงาน|ตาราง|การแจ้งเตือน|คิวงาน)\s*(?:มาดู|มาตรวจ|มาเช็ค|ออกมา)/i.test(text) ||
-      /(?:แจ้งเตือน|เตือน|นัด|ตารางงาน|ตาราง|กำหนดการ|คิวงาน|สิ่งที่ต้องทำ)\s*(?:มีอะไรบ้าง|อะไรบ้าง|มีไหม|มีมั้ย|ทั้งหมด|วันนี้มีอะไร|มีอะไร)/i.test(text) ||
+      /(?:มี|ดู|เช็ค|ตรวจ|บอก|ขอ|สรุป|เปิด|เอา.*มาดู|ขอดู|แสดง|เลือกดู)\s*(?:รายการ)?\s*(?:การ)?(?:แจ้งเตือน|เตือน|นัด|ตารางงาน|ตาราง|กำหนดการ|คิวงาน|งาน)/i.test(text) ||
+      /(?:เอา|ขอ|เปิด|ดึง)\s*(?:ตารางงาน|ตาราง|การแจ้งเตือน|คิวงาน|งาน)\s*(?:มาดู|มาตรวจ|มาเช็ค|ออกมา)/i.test(text) ||
+      /(?:แจ้งเตือน|เตือน|นัด|ตารางงาน|ตาราง|กำหนดการ|คิวงาน|งาน|สิ่งที่ต้องทำ)\s*(?:มีอะไรบ้าง|อะไรบ้าง|มีไหม|มีมั้ย|ทั้งหมด|วันนี้มีอะไร|มีอะไร)/i.test(text) ||
+      /(?:ตารางงานวันนี้|งานวันนี้|งานพรุ่งนี้|งานมีอะไรบ้าง|ตารางมีอะไรบ้าง)/i.test(text) ||
       /(?:รายการ\s*(?:การ)?(?:แจ้งเตือน|เตือน|นัด|ตารางงาน|สิ่งที่ต้องทำ))/i.test(text) ||
       /(?:ตอนนี้|ตินนี้|วันนี้|เรา)\s*(?:มี|ต้องทำ|มีอะไร)\s*(?:แจ้งเตือน|เตือน|นัด|ตารางงาน|งาน)?\s*(?:อะไรบ้าง|ไหม|มั้ย)/i.test(text) ||
+      /(?:เลือกดูงาน|เลือกดูตารางงาน|เลือกดูตาราง|เลือกดู|เวลาเลือกดู)/i.test(cleanScheduleText) ||
       /(?:reminders?|schedule|task)\s*(?:list|check|view|show|what)/i.test(text)
-    ) && !/(?:บันทึก.*ให้หน่อย|ช่วยเตือนว่า|ช่วยเตือน|เตือนให้หน่อย|ตั้งเตือน|เตือนฉันตอน|เตือนตอน|ลงตาราง)/i.test(text);
+    ) && !/(?:บันทึก.*ให้หน่อย|ช่วยเตือนว่า|ช่วยเตือน|เตือนให้หน่อย|ตั้งเตือน|เตือนฉันตอน|เตือนตอน|ลงตาราง|เพิ่มงาน|มีงานเพิ่ม|ลบงาน|ลบ|เอาออก|ยกเลิก)/i.test(text);
 
     if (isScheduleQuery) {
       const reminders = db.getReminders();
@@ -1146,13 +1369,19 @@ ${tuning.conciseness >= 75
       return reply;
     }
 
-    // 6.9 Save / Record Reminders & Work Schedule (Standardized extraction: งานอะไร, เมื่อไหร่, ที่ไหน)
+    // 6.12 Add Task Prompt Without Details ("เพิ่มงาน", "เพิ่มงานอื่น", "เพิ่มงานใหม่", "ลงงานเพิ่ม", "มีงานอื่นอีก")
+    const isAddWithoutDetails = /^(?:บอกให้(?:โนอา|ไอ้โนอา|น้องโนอา)?\s*)?(?:ช่วย|รบกวน)?\s*(?:เพิ่มงาน|เพิ่มงานอื่น|เพิ่มงานใหม่|เพิ่มอีกงาน|ลงงานเพิ่ม|มีงานเพิ่ม|มีงานอื่นอีก|มีอีกงาน|ใส่งานเพิ่ม|เพิ่มตารางงาน)\s*$/i.test(cleanScheduleText);
+    if (isAddWithoutDetails) {
+      return `ได้ค่ะ ต้องการให้โนอาเพิ่มงานอะไร ช่วงเวลาไหน หรือสถานที่ใดคะ บอกได้เลยนะคะ เช่น "เพิ่มงาน ประชุมทีม พรุ่งนี้ 10 โมง" ค่ะ`;
+    }
+
+    // 6.13 Save / Record Reminders & Work Schedule (Standardized extraction: งานอะไร, เมื่อไหร่, ที่ไหน)
     const isScheduleSave = (
-      /(?:บันทึก.*ให้หน่อย|ช่วยเตือนว่า|ช่วยเตือน|เตือนให้หน่อย|ตั้งเตือนว่า|ตั้งเตือน|บันทึกเตือน|บันทึกตารางงาน|จัดตารางงาน|จัดตารางเวลา|จัดตาราง|ลงตารางงาน|ลงตาราง|เพิ่มตารางงาน|เพิ่มในตารางงาน|บันทึกในตารางงาน|ใส่ในตารางงาน|บันทึกนัด|เตือนฉันตอน|เตือนตอน|เตือนเราตอน|ช่วยบันทึก|บันทึกการแจ้งเตือน|บันทึกนัดหมาย|เตือนว่า)/i.test(text) ||
+      /(?:เพิ่มงานอื่นว่า|เพิ่มงานอื่นอีกว่า|เพิ่มงานอื่นอีก|เพิ่มงานอื่น|เพิ่มงานใหม่ว่า|เพิ่มงานใหม่|เพิ่มอีกงานว่า|เพิ่มอีกงาน|เพิ่มงานว่า|เพิ่มงาน|มีงานอื่นอีกว่า|มีงานอื่นอีก|มีอีกงานว่า|มีอีกงาน|มีงานเพิ่มว่า|มีงานเพิ่ม|ลงงานเพิ่มว่า|ลงงานเพิ่ม|ลงงานว่า|ลงงาน|ใส่งานว่า|ใส่งาน|จัดงานว่า|จัดงาน|บันทึกงานว่า|บันทึกงาน|บอกให้โนอาเพิ่มงาน|บอกให้โนอาลงงาน|บอกโนอาเพิ่มงาน|บอกโนอาลงตาราง|บอกให้ลงตาราง|จัดตารางงาน|จัดตารางเวลา|จัดตาราง|บันทึกตารางงาน|บันทึกการแจ้งเตือน|บันทึกนัด|บันทึกเตือน|บันทึกว่า|ช่วยเตือนว่า|ช่วยเตือน|เตือนให้หน่อย|ตั้งเตือนว่า|ตั้งเตือน|เตือนฉันตอน|เตือนตอน|เตือนเราตอน|ช่วยบันทึก|บันทึกนัดหมาย|เตือนว่า)/i.test(text) ||
       /(?:บันทึกว่า|ลงนัดว่า|ลงตารางว่า)\s*(.+)/i.test(text) ||
       /^(?:บันทึก|ช่วยบันทึก|ลงตาราง|เตือน)\s+/i.test(text) ||
       /(?:เวลา|ช่วงเวลา|ตอน)\s+[\u0E00-\u0E7Fa-zA-Z0-9.:\s]+\s*(?:ถึง|-|จนถึง)\s*[\u0E00-\u0E7Fa-zA-Z0-9.:\s]+/i.test(text)
-    ) && !/(?:กี่โมง|เวลาตอนนี้|นาฬิกา|เวลาเท่าไหร่|เวลาเท่าไร|วันอะไร|วันที่เท่าไหร่|วันนี้วันอะไร|time|clock)/i.test(text);
+    ) && !/(?:กี่โมง|เวลาตอนนี้|นาฬิกา|เวลาเท่าไหร่|เวลาเท่าไร|วันอะไร|วันที่เท่าไหร่|วันนี้วันอะไร|time|clock|ลบ|เอาออก|ยกเลิก)/i.test(text);
 
     if (isScheduleSave) {
       const { what, when, where } = this.extractScheduleDetails(text);
@@ -1185,7 +1414,7 @@ ${tuning.conciseness >= 75
     clean = clean.replace(/^(?:โอเค|ok|okay)?\s*(?:งั้นก็|งั้นแหละ|งั้นละ|ถ้างั้น|ถ้าอย่างนั้น|งั้น|เอางี้|เอาเป็นว่า|สรุปว่า|สรุป|คืองี้|คือ|แบบว่า|แบบ|อ่า|เอ่อ|เอ้อ)\s*/gi, '');
     clean = clean.replace(/^(?:ไอ้โนอา|ไอโนอา|น้องโนอา|คุณโนอา|โนอาห์|โนอา|noar\s*ai|noar)\s*[,.:;]?\s*/gi, '');
     clean = clean.replace(/(?:นะแก|นะจ๊ะ|หน่อยนะ|หน่อยดิ|หน่อยสิ|หน่อยครับ|หน่อยค่ะ|หน่อย|ให้หน่อยนะ|ให้หน่อยครับ|ให้หน่อยค่ะ|ให้หน่อยดิ|ให้หน่อยสิ|ให้หน่อย|ให้เราหน่อย|ให้ฉันหน่อย|ด้วยนะ|ด้วยครับ|ด้วยค่ะ|ด้วย|ได้ไหม|ได้มั้ย|ทีครับ|ทีค่ะ|ที|ซิ|ซี่)$/gi, '');
-    clean = clean.replace(/^(?:ช่วย|รบกวน|กรุณา|วาน)?\s*(?:จัดตารางงานว่า|จัดตารางงาน|จัดตารางเวลา|จัดตาราง|บันทึกตารางงานว่า|บันทึกตารางงาน|บันทึกการแจ้งเตือนว่า|บันทึกการแจ้งเตือน|บันทึกนัดว่า|บันทึกนัด|บันทึกเตือนว่า|บันทึกเตือน|บันทึกว่า|บันทึก|ช่วยเตือนว่า|ช่วยเตือน|ตั้งเตือนว่า|ตั้งเตือน|เตือนฉันว่า|เตือนเราว่า|เตือนฉันตอน|เตือนเราตอน|เตือนฉัน|เตือนเรา|เตือนว่า|เตือน|ลงตารางงานว่า|ลงตารางงาน|เพิ่มตารางงานว่า|เพิ่มตารางงาน|ลงนัดว่า|ลงนัด)\s*/gi, '');
+    clean = clean.replace(/^(?:ช่วย|รบกวน|กรุณา|วาน)?\s*(?:บอกให้(?:โนอา|ไอ้โนอา|น้องโนอา)?\s*|บอก(?:โนอา)?\s*|ให้(?:โนอา)?\s*)?(?:จัดตารางงานว่า|จัดตารางงาน|จัดตารางเวลา|จัดตาราง|บันทึกตารางงานว่า|บันทึกตารางงาน|บันทึกการแจ้งเตือนว่า|บันทึกการแจ้งเตือน|บันทึกนัดว่า|บันทึกนัด|บันทึกเตือนว่า|บันทึกเตือน|บันทึกว่า|บันทึก|ช่วยเตือนว่า|ช่วยเตือน|ตั้งเตือนว่า|ตั้งเตือน|เตือนฉันว่า|เตือนเราว่า|เตือนฉันตอน|เตือนเราตอน|เตือนฉัน|เตือนเรา|เตือนว่า|เตือน|ลงตารางงานว่า|ลงตารางงาน|เพิ่มตารางงานว่า|เพิ่มตารางงาน|ลงนัดว่า|ลงนัด|เพิ่มงานอื่นว่า|เพิ่มงานอื่นอีกว่า|เพิ่มงานอื่นอีก|เพิ่มงานอื่น|เพิ่มงานใหม่ว่า|เพิ่มงานใหม่|เพิ่มอีกงานว่า|เพิ่มอีกงาน|เพิ่มงานว่า|เพิ่มงาน|มีงานอื่นอีกว่า|มีงานอื่นอีก|มีอีกงานว่า|มีอีกงาน|มีงานเพิ่มว่า|มีงานเพิ่ม|ลงงานเพิ่มว่า|ลงงานเพิ่ม|ลงงานว่า|ลงงาน|ใส่งานว่า|ใส่งาน|จัดงานว่า|จัดงาน|บันทึกงานว่า|บันทึกงาน|ช่วยเพิ่มงานว่า|ช่วยเพิ่มงาน|ช่วยลงงานว่า|ช่วยลงงาน)\s*/gi, '');
 
     let when = '';
     let where = '';
@@ -1313,9 +1542,10 @@ ${tuning.conciseness >= 75
 
     // 6. Clean What (Action / Event name) - Thoroughly strip conversational prefixes & leakages
     what = what.replace(/^(?:โอเค|ok|งั้นก็|ถ้างั้น|ถ้าอย่างนั้น|งั้น|เอางี้|เอาเป็นว่า|สรุปว่า|สรุป|คืองี้|คือ|แบบว่า|แบบ|อ่า|เอ่อ|เอ้อ)\s*/gi, '');
-    what = what.replace(/^(?:ช่วย|รบกวน|กรุณา|วาน)?\s*(?:จัดตารางงานว่า|จัดตารางงาน|จัดตารางเวลา|จัดตาราง|บันทึกตารางงานว่า|บันทึกตารางงาน|บันทึกการแจ้งเตือนว่า|บันทึกการแจ้งเตือน|บันทึกนัดว่า|บันทึกนัด|บันทึกเตือนว่า|บันทึกเตือน|บันทึกว่า|บันทึก|ช่วยเตือนว่า|ช่วยเตือน|ตั้งเตือนว่า|ตั้งเตือน|เตือนฉันว่า|เตือนเราว่า|เตือนฉันตอน|เตือนเราตอน|เตือนฉัน|เตือนเรา|เตือนว่า|เตือน|ลงตารางงานว่า|ลงตารางงาน|เพิ่มตารางงานว่า|เพิ่มตารางงาน|ลงนัดว่า|ลงนัด)\s*/gi, '');
+    what = what.replace(/^(?:ช่วย|รบกวน|กรุณา|วาน)?\s*(?:บอกให้(?:โนอา|ไอ้โนอา|น้องโนอา)?\s*|บอก(?:โนอา)?\s*|ให้(?:โนอา)?\s*)?(?:จัดตารางงานว่า|จัดตารางงาน|จัดตารางเวลา|จัดตาราง|บันทึกตารางงานว่า|บันทึกตารางงาน|บันทึกการแจ้งเตือนว่า|บันทึกการแจ้งเตือน|บันทึกนัดว่า|บันทึกนัด|บันทึกเตือนว่า|บันทึกเตือน|บันทึกว่า|บันทึก|ช่วยเตือนว่า|ช่วยเตือน|ตั้งเตือนว่า|ตั้งเตือน|เตือนฉันว่า|เตือนเราว่า|เตือนฉันตอน|เตือนเราตอน|เตือนฉัน|เตือนเรา|เตือนว่า|เตือน|ลงตารางงานว่า|ลงตารางงาน|เพิ่มตารางงานว่า|เพิ่มตารางงาน|ลงนัดว่า|ลงนัด|เพิ่มงานอื่นว่า|เพิ่มงานอื่นอีกว่า|เพิ่มงานอื่นอีก|เพิ่มงานอื่น|เพิ่มงานใหม่ว่า|เพิ่มงานใหม่|เพิ่มอีกงานว่า|เพิ่มอีกงาน|เพิ่มงานว่า|เพิ่มงาน|มีงานอื่นอีกว่า|มีงานอื่นอีก|มีอีกงานว่า|มีอีกงาน|มีงานเพิ่มว่า|มีงานเพิ่ม|ลงงานเพิ่มว่า|ลงงานเพิ่ม|ลงงานว่า|ลงงาน|ใส่งานว่า|ใส่งาน|จัดงานว่า|จัดงาน|บันทึกงานว่า|บันทึกงาน|ช่วยเพิ่มงานว่า|ช่วยเพิ่มงาน|ช่วยลงงานว่า|ช่วยลงงาน)\s*/gi, '');
     what = what.replace(/^(?:มี|จะไป|ไป|เรื่อง|งาน|นัด|สิ่งที่ต้องทำ)\s*/gi, '');
     what = what.replace(/\s*(?:ตอน|เวลา|ที่|ณ|ถึง|จนถึง)\s*$/gi, '');
+    what = what.replace(/\s*(?:ในตารางงาน|ในตาราง|ในระบบ)$/gi, '');
     what = what.replace(/\s{2,}/g, ' ').trim();
 
     if (!what || what.length < 2) {

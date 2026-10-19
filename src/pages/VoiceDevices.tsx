@@ -18,24 +18,35 @@ import { db } from '../services/db/databaseService';
 import { audioService } from '../services/audio/audioService';
 import { useAssistantStore } from '../stores/useAssistantStore';
 
+// Isolated live mic meter to prevent the entire VoiceDevices page from re-rendering on 100ms volume changes
+const LiveMicMeter: React.FC<{ sensitivity: number; isTestingMic: boolean }> = React.memo(
+  ({ sensitivity, isTestingMic }) => {
+    const micLevel = useAudioStore((s) => s.micLevel);
+    return (
+      <AudioLevelMeter
+        level={micLevel}
+        threshold={sensitivity}
+        isTesting={isTestingMic}
+      />
+    );
+  }
+);
+
 export const VoiceDevices: React.FC = () => {
-  const {
-    inputDevices,
-    outputDevices,
-    selectedInputId,
-    selectedOutputId,
-    sensitivity,
-    micLevel,
-    isTestingMic,
-    isTestingSpeaker,
-    fetchDevices,
-    setSelectedInput,
-    setSelectedOutput,
-    setSensitivity,
-    startMicTest,
-    stopMicTest,
-    testSpeaker,
-  } = useAudioStore();
+  const inputDevices = useAudioStore((s) => s.inputDevices);
+  const outputDevices = useAudioStore((s) => s.outputDevices);
+  const selectedInputId = useAudioStore((s) => s.selectedInputId);
+  const selectedOutputId = useAudioStore((s) => s.selectedOutputId);
+  const sensitivity = useAudioStore((s) => s.sensitivity);
+  const isTestingMic = useAudioStore((s) => s.isTestingMic);
+  const isTestingSpeaker = useAudioStore((s) => s.isTestingSpeaker);
+  const fetchDevices = useAudioStore((s) => s.fetchDevices);
+  const setSelectedInput = useAudioStore((s) => s.setSelectedInput);
+  const setSelectedOutput = useAudioStore((s) => s.setSelectedOutput);
+  const setSensitivity = useAudioStore((s) => s.setSensitivity);
+  const startMicTest = useAudioStore((s) => s.startMicTest);
+  const stopMicTest = useAudioStore((s) => s.stopMicTest);
+  const testSpeaker = useAudioStore((s) => s.testSpeaker);
 
   const [wakeWord, setWakeWord] = useState('โนอา');
   const [alternateNames, setAlternateNames] = useState<string[]>(['Noar', 'น้องโนอา']);
@@ -134,7 +145,7 @@ export const VoiceDevices: React.FC = () => {
             <select
               value={selectedInputId}
               onChange={(e) => setSelectedInput(e.target.value)}
-              className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+              className="w-full bg-[#1E1E1E] border border-[#2A2A2A] rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
             >
               {inputDevices.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
@@ -143,11 +154,10 @@ export const VoiceDevices: React.FC = () => {
               ))}
             </select>
 
-            {/* Realtime Mic Visualizer */}
-            <AudioLevelMeter
-              level={micLevel}
-              threshold={sensitivity}
-              isTesting={isTestingMic}
+            {/* Realtime Mic Visualizer (Isolated from page re-renders) */}
+            <LiveMicMeter
+              sensitivity={sensitivity}
+              isTestingMic={isTestingMic}
             />
           </div>
 
@@ -181,7 +191,7 @@ export const VoiceDevices: React.FC = () => {
             <select
               value={selectedOutputId}
               onChange={(e) => setSelectedOutput(e.target.value)}
-              className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/50"
+              className="w-full bg-[#1E1E1E] border border-[#2A2A2A] rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/50"
             >
               {outputDevices.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
@@ -194,7 +204,7 @@ export const VoiceDevices: React.FC = () => {
 
         {/* Wake Word & Sensitivity Settings */}
         <div className="space-y-6">
-          <div className="glass-panel p-5 rounded-2xl border border-white/[0.08] space-y-5">
+          <div className="glass-panel p-5 rounded-2xl border border-[#2A2A2A] space-y-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-white p-1 border border-white/20 flex items-center justify-center shrink-0 shadow-xs">
@@ -223,7 +233,7 @@ export const VoiceDevices: React.FC = () => {
                 value={wakeWord}
                 onChange={(e) => setWakeWord(e.target.value)}
                 placeholder="เช่น โนอา, Noar, น้องโนอา"
-                className="w-full bg-[#111624] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500/50"
+                className="w-full bg-[#1E1E1E] border border-[#2A2A2A] rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500/50"
               />
             </div>
 
@@ -242,7 +252,7 @@ export const VoiceDevices: React.FC = () => {
                 {alternateNames.map((alt, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-elevated border border-white/10 text-xs text-slate-200"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#252525] border border-[#2A2A2A] text-xs text-slate-200"
                   >
                     <span>"{alt}"</span>
                     <button
@@ -262,7 +272,7 @@ export const VoiceDevices: React.FC = () => {
                     value={newAltName}
                     onChange={(e) => setNewAltName(e.target.value)}
                     placeholder="เพิ่มชื่อเรียกสำรอง..."
-                    className="flex-1 bg-[#111624] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500/50"
+                    className="flex-1 bg-[#1E1E1E] border border-[#2A2A2A] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500/50"
                   />
                   <button
                     onClick={addAlternateName}
