@@ -31,6 +31,20 @@ export class AudioService {
   private silenceDetectedMs = 0;
   private hasUserStartedTalking = false;
 
+  // Desktop Continuous VAD Wake Word Engine with Circular PCM Audio Buffer
+  private vadWakeInterval: any = null;
+  private isDesktopVadWakeActive = false;
+  private isUserCurrentlySpeaking = false;
+  private speechStartTime = 0;
+  private lastSpeechTime = 0;
+  private isProcessingWakeSnippet = false;
+  private pcmRingBuffer: Float32Array | null = null;
+  private pcmRingIndex = 0;
+  private pcmTotalSamplesCollected = 0;
+  private scriptProcessor: ScriptProcessorNode | null = null;
+  private dummyGainNode: GainNode | null = null;
+  private micSourceNode: MediaStreamAudioSourceNode | null = null;
+
   private constructor() {
     this.initSpeechRecognition();
   }
@@ -286,6 +300,9 @@ export class AudioService {
         source.connect(this.analyser);
       }
 
+      // Initialize Continuous PCM Circular Audio Ring Buffer
+      this.setupPcmRingBuffer(stream);
+
       const timeData = new Uint8Array(this.analyser.fftSize);
       const updateMeter = () => {
         if (!this.analyser) return;
@@ -310,12 +327,103 @@ export class AudioService {
     }
   }
 
+  // Setup Continuous PCM Circular Audio Ring Buffer (background safe, works even when window unfocused/minimized)
+  private setupPcmRingBuffer(stream: MediaStream) {
+    try {
+      if (!this.audioContext || this.audioContext.state === 'closed') {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        this.audioContext = new AudioCtx();
+      }
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(() => {});
+      }
+
+      const sampleRate = this.audioContext.sampleRate || 44100;
+      const ringBufferSize = Math.round(sampleRate * 3.5); // 3.5 seconds circular buffer
+      if (!this.pcmRingBuffer || this.pcmRingBuffer.length !== ringBufferSize) {
+        this.pcmRingBuffer = new Float32Array(ringBufferSize);
+        this.pcmRingIndex = 0;
+        this.pcmTotalSamplesCollected = 0;
+      }
+
+      if (!this.scriptProcessor) {
+        this.scriptProcessor = this.audioContext.createScriptProcessor(2048, 1, 1);
+        this.dummyGainNode = this.audioContext.createGain();
+        this.dummyGainNode.gain.value = 0; // Muted so user never hears mic feedback
+
+        this.scriptProcessor.onaudioprocess = (e) => {
+          const input = e.inputBuffer.getChannelData(0);
+          if (!this.pcmRingBuffer) return;
+          const bufLen = this.pcmRingBuffer.length;
+          let sumSquares = 0;
+          for (let i = 0; i < input.length; i++) {
+            const s = input[i];
+            sumSquares += s * s;
+            this.pcmRingBuffer[this.pcmRingIndex] = s;
+            this.pcmRingIndex = (this.pcmRingIndex + 1) % bufLen;
+          }
+          this.pcmTotalSamplesCollected += input.length;
+          const rms = Math.sqrt(sumSquares / input.length);
+          // Update real-time mic level directly from hardware audio thread
+          this.micLevel = Math.min(100, Math.round(rms * 320));
+        };
+
+        if (!this.micSourceNode) {
+          this.micSourceNode = this.audioContext.createMediaStreamSource(stream);
+        }
+        this.micSourceNode.connect(this.scriptProcessor);
+        this.scriptProcessor.connect(this.dummyGainNode);
+        this.dummyGainNode.connect(this.audioContext.destination);
+      }
+    } catch (err) {
+      console.warn('[AudioService] setupPcmRingBuffer error:', err);
+    }
+  }
+
+  // Extract recent N seconds of unclipped PCM audio samples from circular ring buffer
+  public getRecentAudioSamples(durationSeconds: number): { samples: Float32Array; sampleRate: number } {
+    if (!this.pcmRingBuffer || !this.audioContext || this.pcmTotalSamplesCollected === 0) {
+      return { samples: new Float32Array(0), sampleRate: 44100 };
+    }
+    const sampleRate = this.audioContext.sampleRate || 44100;
+    const neededSamples = Math.min(
+      Math.round(sampleRate * durationSeconds),
+      this.pcmRingBuffer.length,
+      this.pcmTotalSamplesCollected
+    );
+    const result = new Float32Array(neededSamples);
+    const bufLen = this.pcmRingBuffer.length;
+    let startIdx = (this.pcmRingIndex - neededSamples + bufLen) % bufLen;
+    for (let i = 0; i < neededSamples; i++) {
+      result[i] = this.pcmRingBuffer[(startIdx + i) % bufLen];
+    }
+    return { samples: result, sampleRate };
+  }
+
   public getMicrophoneLevel(): number {
     return this.micLevel;
   }
 
   public stopMicrophoneMeter(): void {
     if (!this.isListeningForWakeWord && this.voiceSessionState === 'idle') {
+      if (this.scriptProcessor) {
+        try {
+          this.scriptProcessor.disconnect();
+        } catch (_) {}
+        this.scriptProcessor = null;
+      }
+      if (this.dummyGainNode) {
+        try {
+          this.dummyGainNode.disconnect();
+        } catch (_) {}
+        this.dummyGainNode = null;
+      }
+      if (this.micSourceNode) {
+        try {
+          this.micSourceNode.disconnect();
+        } catch (_) {}
+        this.micSourceNode = null;
+      }
       if (this.unifiedMediaStream) {
         this.unifiedMediaStream.getTracks().forEach(t => t.stop());
         this.unifiedMediaStream = null;
@@ -472,7 +580,11 @@ export class AudioService {
 
       this.recognition.onerror = (e: any) => {
         if (e.error !== 'no-speech' && e.error !== 'aborted') {
-          console.warn('SpeechRecognition error:', e);
+          console.warn('[AudioService] SpeechRecognition error:', e);
+        }
+        if (e.error === 'network' || e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          console.log('[AudioService] Web Speech API blocked or unavailable. Switching to Desktop VAD Wake Word Engine.');
+          this.startDesktopVadWakeDetector();
         }
       };
 
@@ -482,6 +594,11 @@ export class AudioService {
           this.commandStartResultIndex = 0;
         }
         if (this.isListeningForWakeWord && this.voiceSessionState !== 'speaking') {
+          const isElectron = typeof window !== 'undefined' && Boolean((window as any).electronAPI);
+          if (isElectron) {
+            this.startDesktopVadWakeDetector();
+            return;
+          }
           setTimeout(() => {
             try {
               if (this.isListeningForWakeWord && this.voiceSessionState !== 'speaking') {
@@ -494,7 +611,9 @@ export class AudioService {
                   if (this.isListeningForWakeWord && this.voiceSessionState !== 'speaking') {
                     this.recognition.start();
                   }
-                } catch (__) {}
+                } catch (__) {
+                  this.startDesktopVadWakeDetector();
+                }
               }, 300);
             }
           }, 100);
@@ -571,6 +690,13 @@ export class AudioService {
 
     await this.ensureMicrophonePreAmp();
 
+    const isElectron = typeof window !== 'undefined' && Boolean((window as any).electronAPI);
+    if (isElectron) {
+      console.log('[AudioService] Electron detected: Starting Continuous Desktop VAD Wake Word Engine.');
+      await this.startDesktopVadWakeDetector();
+      return;
+    }
+
     if (this.recognition) {
       try {
         this.recognition.start();
@@ -579,13 +705,23 @@ export class AudioService {
         if (err.name !== 'InvalidStateError') {
           console.warn('[AudioService] recognition.start warning:', err);
         }
+        await this.startDesktopVadWakeDetector();
       }
+    } else {
+      await this.startDesktopVadWakeDetector();
     }
   }
 
   public stopWakeWordDetection() {
     this.isListeningForWakeWord = false;
     this.voiceSessionState = 'idle';
+    if (this.vadWakeInterval) {
+      clearInterval(this.vadWakeInterval);
+      this.vadWakeInterval = null;
+    }
+    this.isDesktopVadWakeActive = false;
+    this.isUserCurrentlySpeaking = false;
+    this.isProcessingWakeSnippet = false;
     if (this.commandSilenceTimer) clearTimeout(this.commandSilenceTimer);
     if (this.commandMaxTimer) clearTimeout(this.commandMaxTimer);
     if (this.vadCheckInterval) {
@@ -608,6 +744,173 @@ export class AudioService {
       try {
         this.recognition.stop();
       } catch (_) {}
+    }
+  }
+
+  // Start continuous Desktop VAD wake word detector with circular pre-roll PCM audio buffer
+  public async startDesktopVadWakeDetector(): Promise<void> {
+    if (this.isDesktopVadWakeActive) return;
+    this.isDesktopVadWakeActive = true;
+
+    await this.ensureMicrophonePreAmp();
+    const stream = await this.getOrCreateMediaStream();
+    if (stream) {
+      this.setupPcmRingBuffer(stream);
+    }
+    await this.startMicrophoneMeter();
+
+    if (this.vadWakeInterval) clearInterval(this.vadWakeInterval);
+
+    this.vadWakeInterval = setInterval(async () => {
+      // Only process when in listening_wake state and not speaking/capturing command
+      if (!this.isListeningForWakeWord || this.voiceSessionState !== 'listening_wake' || this.isProcessingWakeSnippet) {
+        this.isUserCurrentlySpeaking = false;
+        return;
+      }
+
+      const currentLevel = this.micLevel;
+      const threshold = this.getWakeThreshold();
+      const now = Date.now();
+
+      // CASE 1: Currently waiting for speech onset
+      if (!this.isUserCurrentlySpeaking) {
+        if (currentLevel >= threshold) {
+          this.isUserCurrentlySpeaking = true;
+          this.speechStartTime = now;
+          this.lastSpeechTime = now;
+        }
+      }
+      // CASE 2: User is currently speaking
+      else {
+        if (currentLevel >= threshold) {
+          this.lastSpeechTime = now;
+        }
+
+        const speechDuration = now - this.speechStartTime;
+        const silenceDuration = now - this.lastSpeechTime;
+
+        // Wake trigger conditions:
+        // 1. Spoke for at least 180ms and then paused for 300ms (e.g. said "โนอา" <pause>)
+        // 2. Continuous sentence spoken for >= 2.0s (e.g. said "โนอา เปิดเพลงหน่อย")
+        const isPauseAfterSpeech = speechDuration >= 180 && silenceDuration >= 300;
+        const isMaxDurationReached = speechDuration >= 2000;
+
+        if (isPauseAfterSpeech || isMaxDurationReached) {
+          this.isUserCurrentlySpeaking = false;
+          // Pull audio from circular buffer: speech duration + 450ms pre-speech attack buffer
+          const pullSeconds = Math.min(3.0, (speechDuration + 450) / 1000);
+          await this.evaluateWakeWordFromBuffer(pullSeconds);
+        }
+      }
+    }, 60);
+  }
+
+  private async evaluateWakeWordFromBuffer(pullSeconds: number): Promise<void> {
+    const { samples, sampleRate } = this.getRecentAudioSamples(pullSeconds);
+    if (samples.length < sampleRate * 0.25) {
+      return;
+    }
+
+    const wavBlob = this.encodeWAV(samples, sampleRate);
+    if (wavBlob.size < 1000) return;
+
+    this.isProcessingWakeSnippet = true;
+
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const res = reader.result as string;
+          resolve(res.split(',')[1] || '');
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(wavBlob);
+      const audioBase64 = await base64Promise;
+
+      if (!audioBase64) {
+        this.isProcessingWakeSnippet = false;
+        return;
+      }
+
+      let transcribedText = '';
+
+      // 1. Electron IPC Whisper (Groq Whisper-large-v3-turbo / OpenAI Whisper)
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.transcribeAudio) {
+        const settings = db.getSettings();
+        const ipcRes = await (window as any).electronAPI.transcribeAudio({
+          audioBase64,
+          mimeType: 'audio/wav',
+          language: 'th',
+          apiKey: settings.meta_api_key || '',
+        });
+        if (ipcRes?.success && ipcRes?.text) {
+          transcribedText = ipcRes.text;
+        }
+      }
+
+      // 2. Direct web fallback if outside electron or failed
+      if (!transcribedText) {
+        try {
+          const settings = db.getSettings();
+          const groqKey =
+            settings.meta_api_key ||
+            (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GROQ_API_KEY) ||
+            '';
+          const formData = new FormData();
+          formData.append('file', wavBlob, 'wake.wav');
+          formData.append('model', 'whisper-large-v3-turbo');
+          formData.append('language', 'th');
+
+          const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${groqKey}`,
+            },
+            body: formData,
+          });
+          if (resp.ok) {
+            const json = await resp.json();
+            transcribedText = json.text || '';
+          }
+        } catch (_) {}
+      }
+
+      const raw = (transcribedText || '').trim();
+      if (!raw) {
+        this.isProcessingWakeSnippet = false;
+        return;
+      }
+
+      console.log('[Bo AI Desktop Ring Buffer Heard]:', raw);
+
+      const { matched, matchedWord } = this.checkWakeWordMatch(raw);
+
+      if (matched && (this.voiceSessionState === 'listening_wake' || this.voiceSessionState === 'idle')) {
+        console.log('[Bo AI Desktop Wake Word SUCCESS]:', raw, '| Matched:', matchedWord);
+
+        // Check if user spoke a full command along with wake word (e.g. "โนอา เปิดเพลงหน่อย")
+        const pos = raw.toLowerCase().indexOf(matchedWord.toLowerCase());
+        let trailing = '';
+        if (pos !== -1) {
+          trailing = raw.slice(pos + matchedWord.length).trim();
+          trailing = trailing.replace(/^[,.:;!?-]+\s*/, '').trim();
+        }
+
+        if (trailing && trailing.length >= 2) {
+          this.playChime('wake');
+          this.wakeWordCallbacks.forEach((cb) => cb());
+          this.finalizeCommand(trailing);
+        } else {
+          // User just called "โนอา", startManualVoiceCommand triggers wake chime & begins capturing command!
+          this.wakeWordCallbacks.forEach((cb) => cb());
+          await this.startManualVoiceCommand();
+        }
+      }
+    } catch (err) {
+      console.warn('[AudioService] evaluateWakeWordFromBuffer error:', err);
+    } finally {
+      this.isProcessingWakeSnippet = false;
     }
   }
 
@@ -898,12 +1201,14 @@ export class AudioService {
     this.currentCapturedTranscript = '';
     this.commandStartResultIndex = 0;
 
-    // Abort speech recognition so it releases the microphone completely for MediaRecorder
+    // Abort speech recognition & wake recorder so microphone is completely free for command MediaRecorder
     if (this.recognition) {
       try {
         this.recognition.abort();
       } catch (_) {}
     }
+    this.isUserCurrentlySpeaking = false;
+    this.isProcessingWakeSnippet = false;
 
     await this.startMicrophoneMeter();
     await this.startAudioRecording();
@@ -914,6 +1219,8 @@ export class AudioService {
   public setSpeakingState(speaking: boolean) {
     if (speaking) {
       this.voiceSessionState = 'speaking';
+      this.isUserCurrentlySpeaking = false;
+      this.isProcessingWakeSnippet = false;
       if (this.commandSilenceTimer) clearTimeout(this.commandSilenceTimer);
       if (this.commandMaxTimer) clearTimeout(this.commandMaxTimer);
       if (this.vadCheckInterval) {
@@ -935,19 +1242,28 @@ export class AudioService {
       }
     } else {
       this.voiceSessionState = this.isListeningForWakeWord ? 'listening_wake' : 'idle';
+      this.isUserCurrentlySpeaking = false;
+      this.isProcessingWakeSnippet = false;
       this.currentCapturedTranscript = '';
       this.commandStartResultIndex = 0;
       if (this.isListeningForWakeWord) {
         this.ensureMicrophonePreAmp().then(() => {
-          if (this.recognition) {
+          const isElectron = typeof window !== 'undefined' && Boolean((window as any).electronAPI);
+          if (isElectron) {
+            this.startDesktopVadWakeDetector();
+          } else if (this.recognition) {
             setTimeout(() => {
               try {
                 if (this.isListeningForWakeWord && this.voiceSessionState === 'listening_wake') {
                   this.recognition.start();
                   console.log('[AudioService] Resumed wake word recognition after speaking.');
                 }
-              } catch (_) {}
+              } catch (_) {
+                this.startDesktopVadWakeDetector();
+              }
             }, 200);
+          } else {
+            this.startDesktopVadWakeDetector();
           }
         });
       }

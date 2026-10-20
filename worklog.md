@@ -888,7 +888,74 @@
   - [`worklog.md`](file:///c:/Anewproject/boai/worklog.md)
 
 ---
-*บันทึกล่าสุด: 19 ตุลาคม 2026*
+
+### 38. แก้ปัญหาและปรับปรุงระบบไมโครโฟนบน Desktop App ด้วย Circular Ring Buffer VAD & Whisper Audio Engine 🎙️⚡
+- **ปัญหาที่พบ:**
+  - ในเว็บเบราว์เซอร์ (Chrome) โนอารับฟังเสียงและจับคำเรียก "โนอา" ได้เป็นปกติ
+  - แต่เมื่อทดสอบบน Electron Desktop App พบว่าไมโครโฟนเชื่อมต่ออยู่ แต่โนอาไม่ได้ยินคำเรียก ไม่ส่งเสียงตอบรับ และไม่เข้าสู่สถานะรับฟังคำสั่ง
+- **สาเหตุเชิงลึก:**
+  1. **Chromium ใน Electron ไม่มี Google Speech Service:** Web Speech API (`webkitSpeechRecognition`) บนเบราว์เซอร์ Chrome ใช้บริการ Speech-to-Text บนคลาวด์ของ Google เป็นค่าเริ่มต้น แต่ Chromium ที่ติดตั้งใน Electron ไม่มี API Key หรือ Google Speech Service ฝังมาด้วย ทำให้การเรียก recognition แบบ Continuous ล้มเหลวหรือไม่มีผลลัพธ์ส่งกลับมา
+  2. **ปัญหา Audio Clipping (พยางค์แรกขาด):** คำว่า *"โนอา"* เป็นคำสั้นมาก (~0.3–0.4 วินาที) หากใช้ระบบตรวจจับแบบเดิมที่รอให้ระดับเสียงพุ่งขึ้นก่อนแล้วค่อยสั่งเริ่มบันทึก คลื่นเสียงพยางค์แรกอย่าง *"โน-"* จะถูกตัดทิ้ง เหลือเพียงเสียงท้ายคำ *"..อา"* ทำให้ AI ไม่สามารถตรวจจับว่าเป็นคำเรียกได้
+  3. **Path การโหลดไฟล์ `.env` ใน Electron Executable:** เมื่อแอปถูก Pack หรือรันจาก Working Directory อื่น ตัว Main Process อาจหาไฟล์ `.env` ไม่เจอ ทำให้ไม่มี API Key สำหรับถอดเสียงคำสั่ง
+- **การดำเนินการและแนวทางแก้ไข:**
+  1. **ระบบ Circular PCM Ring Buffer (Pre-roll Memory Buffer):**
+     - สร้าง Audio Buffer วนลูปขนาด 3.0 วินาทีในหน่วยความจำ RAM (ใช้ RAM เพียง ~100KB)
+     - เมื่อผู้ใช้เริ่มพูด ระบบสามารถดึงคลื่นเสียงย้อนหลังกลับไป 450ms ก่อนเวลาที่เสียงจะดังขึ้น ทำให้ได้คลื่นเสียงที่ครบถ้วนตั้งแต่เริ่มอ้าปากพูดคำว่า *"โนอา"* เต็มคำ 100%
+  2. **ระบบตรวจจับกิจกรรมเสียงบนเดสก์ท็อป (Desktop VAD - Voice Activity Detection):**
+     - ตรวจสอบระดับเสียง RMS ทุก 60ms พร้อมทั้งระบบจับจังหวะการหยุดพูด (Pause Detection)
+     - เมื่อพูดคำเรียกแล้วหยุดเว้นวรรค หรือพูดประโยคยาวต่อเนื่อง ระบบจะตัดท่อนเสียงจาก Ring Buffer ส่งไปวิเคราะห์ทันที
+  3. **เชื่อมต่อ Whisper Audio Transcription ผ่าน Electron IPC:**
+     - ส่ง Audio WAV Snippet ไปยัง Main Process ผ่าน IPC Handler `transcribeAudio` โดยใช้โมเดล Groq Whisper-large-v3-turbo (และ OpenAI Whisper เป็นตัวสำรอง) เพื่อถอดเสียงคำว่า "โนอา" และคำสั่งภาษาไทยได้อย่างรวดเร็วและแม่นยำ
+  4. **รองรับ Multi-path `.env` Loading:**
+     - ปรับปรุง `electron/main.ts` ให้ค้นหาไฟล์ `.env` จากหลาย Path สำคัญ (`../.env`, `process.cwd()`, `process.resourcesPath`, และ Absolute Path)
+- **ไฟล์ที่สร้าง/แก้ไข:**
+  - [`src/services/audio/audioService.ts`](file:///c:/Anewproject/boai/src/services/audio/audioService.ts)
+  - [`electron/ipc-handlers.ts`](file:///c:/Anewproject/boai/electron/ipc-handlers.ts)
+  - [`electron/main.ts`](file:///c:/Anewproject/boai/electron/main.ts)
+  - [`src/services/db/databaseService.ts`](file:///c:/Anewproject/boai/src/services/db/databaseService.ts)
+
+---
+
+## 🎯 แผนงานพัฒนาและปรับปรุงระบบเสียงต่อในรอบถัดไป (Audio System Roadmap & Next Action Plan)
+
+เพื่อยกระดับระบบการฟังและการพูดของโนอาให้มีความเสถียร ลื่นไหล และเป็นธรรมชาติระดับสูงสุด มีแผนงานที่ต้องพัฒนาและปรับจูนต่อดังนี้:
+
+### 1. การลดความหน่วงและการตรวจจับคำเรียกให้แม่นยำระดับ Real-Time (Wake Word & Latency Optimization)
+- **ปรับจูนค่า Silence & VAD Threshold:**
+  - ปรับลดระยะเวลาตรวจจับความเงียบ (Silence Pause Duration) จาก 300ms ให้เหลือ 150–200ms เพื่อให้โนอาส่งเสียง Ding! ตอบรับได้ทันทีที่ผู้ใช้พูดจบคำว่า "โนอา"
+  - พัฒนาระบบ Adaptive Noise Floor ให้ปรับค่าเกณฑ์ความดังอัตโนมัติตามสภาพแวดล้อมห้อง (เช่น ห้องเงียบ vs ห้องมีเสียงพัดลม/แอร์)
+- **วิจัยและประเมิน Local On-Device Keyword Spotting (KWS):**
+  - พิจารณาการติดตั้งโมเดลตรวจจับคำเรียกออฟไลน์บนเครื่อง (เช่น Picovoice Porcupine, Sherpa-ONNX หรือ WebAssembly Lightweight VAD/KWS)
+  - วัตถุประสงค์เพื่อตรวจจับคำว่า "โนอา" ได้ที่ 0ms Latency โดยไม่ต้องส่ง Audio Chunk ไปเรียก Whisper API ในขั้นตอน Wake Word
+- **ขยายฐานคำและสำเนียง (Acoustic & Phonetic Variations):**
+  - เพิ่มเติมความยืดหยุ่นในการจับคำเรียกเมื่อผู้ใช้พูดเสียงกระซิบ เสียงแผ่วเบา หรือสำเนียงเร็ว
+
+### 2. การแยกอุปกรณ์และการตั้งค่าไมโครโฟน (Microphone Device Selection & Gain Control)
+- **Hot-swapping Audio Input Device:**
+  - ปรับปรุงให้การเลือกไมโครโฟนในหน้า Settings มีผลสลับอุปกรณ์ในทุก Audio Streams (`preAmpStream`, `unifiedMediaStream`, `AudioContext`) ทันทีโดยไม่ต้องรีสตาร์ตหรือรีโหลดหน้าต่าง
+- **Live Microphone Volume Meter ในหน้าตั้งค่า:**
+  - เพิ่มแถบวัดระดับสัญญาณเสียงไมค์สด (Live Visualizer Bar) ในหน้าการตั้งค่าเสียง เพื่อให้ผู้ใช้สามารถทดสอบพูดและตรวจเช็คได้ชัดเจนว่าไมโครโฟนตัวใดกำลังรับเสียงอยู่
+  - เพิ่มการปรับ Audio Gain Boost / Software Pre-amp ให้ผู้ใช้สามารถเร่งระดับสัญญาณเสียงไมค์ได้หากไมโครโฟนมีเสียงเบาเกินไป
+
+### 3. การตัดเสียงสะท้อนและการพูดขัดจังหวะ (AEC & Barge-In Optimization)
+- **Acoustic Echo Cancellation (AEC) ในระดับสถาปัตยกรรม:**
+  - แยก Audio Stream และเพิ่ม Echo Cancellation Filter เมื่อเปิดเสียงลำโพงดัง เพื่อไม่ให้เสียงตอบกลับของโนอาสะท้อนเข้าไมโครโฟนแล้วกลายเป็นคำสั่งเสียงใหม่
+- **Fine-Tuning Barge-In Sensitivity:**
+  - ปรับจูนให้โนอาแยกแยะได้ชัดเจนระหว่างเสียงผู้ใช้ที่ตั้งใจพูดขัดจังหวะ กับเสียงลมหายใจหรือเสียงกระแทกโต๊ะ
+
+### 4. ระบบถอดเสียงแบบสตรีมมิ่งสด (Real-Time Streaming Speech-to-Text)
+- **Live Interim Transcriptions:**
+  - พัฒนาการส่ง Audio Chunks แบบ Real-Time Streaming ไปยัง STT Engine เพื่อให้ข้อความคำถามของผู้ใช้ทยอยแสดงขึ้นมาทีละคำบนหน้าจอขณะกำลังพูด
+  - ช่วยให้ผู้ใช้ทราบว่าระบบกำลังได้ยินสิ่งที่ตนพูดอย่างถูกต้องโดยไม่ต้องรอจนประโยคจบ
+
+### 5. ความเสถียรของ Audio Context และ State Machine
+- **Robust State Transition & Error Recovery:**
+  - ป้องกัน Race Condition ระหว่างสถานะ `idle` ⇄ `listening_wake` ⇄ `capturing_command` ⇄ `speaking`
+  - ตรวจสอบการฟื้นฟู `AudioContext` และ `MediaStream` อัตโนมัติเมื่อเครื่องคอมพิวเตอร์ตื่นจาก Sleep Mode หรือมีการถอด/เสียบอุปกรณ์เสียงใหม่
+
+---
+*บันทึกล่าสุด: 20 ตุลาคม 2026*
+
 
 
 

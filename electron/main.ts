@@ -8,20 +8,29 @@ import { startLocalServer, stopLocalServer } from './local-server';
 
 // Load .env variables into process.env so IPC handlers have API keys
 try {
-  const envPath = path.join(__dirname, '../.env');
-  if (fs.existsSync(envPath)) {
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    envContent.split(/\r?\n/).forEach((line) => {
-      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-      if (match) {
-        const key = match[1];
-        let value = match[2] || '';
-        value = value.trim().replace(/^['"](.*)['"]$/, '$1');
-        if (!process.env[key]) {
-          process.env[key] = value;
+  const possiblePaths = [
+    path.join(__dirname, '../.env'),
+    path.join(process.cwd(), '.env'),
+    path.join(process.resourcesPath, '.env'),
+    path.join(process.resourcesPath, 'app/.env'),
+    'c:\\Anewproject\\boai\\.env'
+  ];
+  for (const envPath of possiblePaths) {
+    if (fs.existsSync(envPath)) {
+      const envContent = fs.readFileSync(envPath, 'utf8');
+      envContent.split(/\r?\n/).forEach((line) => {
+        const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+        if (match) {
+          const key = match[1];
+          let value = match[2] || '';
+          value = value.trim().replace(/^['"](.*)['"]$/, '$1');
+          if (!process.env[key]) {
+            process.env[key] = value;
+          }
         }
-      }
-    });
+      });
+      break;
+    }
   }
 } catch (_) {}
 
